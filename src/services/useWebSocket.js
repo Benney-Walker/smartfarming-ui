@@ -1,91 +1,95 @@
-// ===== File: useWebSocket.js =====
+// useWebSocket.js
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
 const WS_URL = "http://localhost:8080/ws";
-const RECONNECT_DELAY = 5000;
 
 export function useWebSocket({
                                  onWsStatus,
                                  onAlerts,
-                                 onDashboardStats,
-                                 onIrrigationCommand,
+                                 onLogs,
+                                 onRecentCommands,
                              } = {}) {
-    const stompRef = useRef(null);
 
     useEffect(() => {
-        if (!onWsStatus) return;
 
-        onWsStatus("Connecting…");
+        onWsStatus?.("Connecting...");
 
         const client = new Client({
+
             webSocketFactory: () => new SockJS(WS_URL),
-            reconnectDelay: RECONNECT_DELAY,
+
+            reconnectDelay: 5000,
+
             debug: () => {},
 
             onConnect: () => {
-                onWsStatus("Connected");
 
-                // ✅ Alerts (if your backend supports it)
+                console.log("WebSocket connected");
+
+                onWsStatus?.("Connected");
+
+                // 🚨 ALERTS
                 if (onAlerts) {
-                    client.subscribe("/topic/alerts", (msg) => {
+                    client.subscribe("/topic/alerts", (message) => {
                         try {
-                            const data = JSON.parse(msg.body);
-                            onAlerts(Array.isArray(data) ? data : [data]);
+                            const data = JSON.parse(message.body);
+                            onAlerts(data);
                         } catch (e) {
                             console.error("Alerts parse error:", e);
                         }
                     });
                 }
 
-                // ✅ Admin stats
-                if (onDashboardStats) {
-                    client.subscribe("/topic/admin/stats", (msg) => {
+                // 📜 LOGS
+                if (onLogs) {
+                    client.subscribe("/topic/logs", (message) => {
                         try {
-                            onDashboardStats(JSON.parse(msg.body));
-                        } catch {}
+                            const data = JSON.parse(message.body);
+                            onLogs(data);
+                        } catch (e) {
+                            console.error("Logs parse error:", e);
+                        }
                     });
                 }
 
-                // ✅ Irrigation events
-                if (onIrrigationCommand) {
-                    client.subscribe("/topic/admin/irrigation", (msg) => {
+                // 💧 RECENT COMMANDS
+                if (onRecentCommands) {
+                    client.subscribe("/topic/recent-commands", (message) => {
                         try {
-                            onIrrigationCommand(JSON.parse(msg.body));
-                        } catch {}
+                            const data = JSON.parse(message.body);
+                            onRecentCommands(data);
+                        } catch (e) {
+                            console.error("Recent commands parse error:", e);
+                        }
                     });
                 }
+
             },
 
             onDisconnect: () => {
-                onWsStatus("Disconnected");
+                console.log("WebSocket disconnected");
+                onWsStatus?.("Disconnected");
             },
 
             onStompError: (frame) => {
                 console.error("STOMP error:", frame);
-                onWsStatus("Disconnected");
+                onWsStatus?.("Disconnected");
             },
 
             onWebSocketError: (error) => {
                 console.error("WebSocket error:", error);
-                onWsStatus("Disconnected");
+                onWsStatus?.("Disconnected");
             },
         });
 
-        try {
-            client.activate();
-            stompRef.current = client;
-        } catch (e) {
-            console.warn("WebSocket failed to start:", e);
-            onWsStatus("Disconnected");
-        }
+        client.activate();
 
         return () => {
-            if (stompRef.current) {
-                stompRef.current.deactivate();
-            }
+            client.deactivate();
         };
-    }, []); // run once
+
+    }, []);
 }
