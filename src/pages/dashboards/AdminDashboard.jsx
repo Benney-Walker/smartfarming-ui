@@ -103,8 +103,8 @@ export default function AdminDashboard() {
     // ── Table data ────────────────────────────────────────────
     const [users,        setUsers]        = useState(null);
     const [fields,       setFields]       = useState(null);
-    const [activityLogs, setActivityLogs] = useState(null);
-    const [alerts,       setAlerts]       = useState(null);
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [alerts,       setAlerts]       = useState([]);
     const [alertCounts,  setAlertCounts]  = useState({ info: 0, warn: 0, crit: 0 });
     const [owners,       setOwners]       = useState([]);
 
@@ -137,14 +137,7 @@ export default function AdminDashboard() {
                     ? '<span class="live-dot" aria-hidden="true"></span>Connected'
                     : `<span class="live-dot" aria-hidden="true"></span>${status}`
             ),
-        onDashboardStats: ({ farmsOnline: fo, waterUsed: wu }) => {
-            setFarmsOnline(fo);
-            setWaterUsage(wu + "L");
-        },
-        onIrrigationCommand: (command) => {
-            if (!command) return;
-            setCommands((prev) => [command, ...prev].slice(0, 20));
-        },
+
         onAlerts: (incoming) => {
             setAlerts(incoming);
             const counts = { info: 0, warn: 0, crit: 0 };
@@ -155,6 +148,24 @@ export default function AdminDashboard() {
                 else if (sev === "critical" || sev === "crit") counts.crit++;
             });
             setAlertCounts(counts);
+        },
+
+        // ── Logs ───────────────────────
+        onLogs: (log) => {
+
+            console.log("LOG:", log);
+
+            setActivityLogs((prev) => [log, ...prev]);
+
+        },
+
+        // ── Recent Commands ────────────
+        onRecentCommands: (command) => {
+
+            console.log("COMMAND:", command);
+
+            setCommands((prev) => [command, ...prev]);
+
         },
     });
 
