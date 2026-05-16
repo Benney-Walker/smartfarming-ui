@@ -1,6 +1,6 @@
 // ===== File: login.js (updated — append setNewPassword to the existing file) =====
 
-const BASE_URL = "http://localhost:8080/api/auth";
+const BASE_URL = "https://smartfarming-backend-production.up.railway.app/api/auth";
 
 /**
  * Sets a new password for a first-time user.

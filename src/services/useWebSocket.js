@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
-const WS_URL = "http://localhost:8080/ws";
+const WS_URL = "https://smartfarming-backend-production.up.railway.app/ws";
 
 export function useWebSocket({
                                  onWsStatus,

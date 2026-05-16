@@ -1,6 +1,6 @@
 // ===== File: login.js =====
 
-const BASE_URL = "http://localhost:8080/api/auth";
+const BASE_URL = "https://smartfarming-backend-production.up.railway.app/api/auth";
 
 export async function checkUser(email) {
     const response = await fetch(

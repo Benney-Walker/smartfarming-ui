@@ -1,6 +1,6 @@
 // ===== File: login.js (full — replaces previous version) =====
 
-const ADMIN_URL_V1   = "http://localhost:8080/api/admin/v1";
+const ADMIN_URL_V1   = "https://smartfarming-backend-production.up.railway.app/api/admin/v1";
 
 function authHeaders() {
     return {
