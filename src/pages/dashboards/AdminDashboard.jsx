@@ -15,7 +15,7 @@ import {
     updateUserStatus,
     getUserDetails,
     populateAdminOwnersDropdown,
-} from "../../services/admindashboard.js";
+} from "../../services/dashboard.js";
 import "../../styles/admindashboard.css";
 
 // ── SVGs ──────────────────────────────────────────────────────

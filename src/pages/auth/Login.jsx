@@ -85,7 +85,7 @@ export default function Login() {
             if (data.role === "ADMIN") {
                 navigate("/admin-dashboard");
             } else if (data.role === "FARMER") {
-                navigate("/farm-dashboard");
+                navigate("/farmer-dashboard");
             } else {
                 setApiError("You don't have access to this system.");
             }
