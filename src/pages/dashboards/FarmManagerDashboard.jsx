@@ -332,13 +332,13 @@ export default function FarmManagerDashboard() {
                 </div>
             </header>
 
-            {/* Mobile overlay */}
+            {/* Mobile overlay
             <div
                 className={`nav-overlay${mobileNavOpen ? " open" : ""}`}
                 id="navOverlay"
                 aria-hidden={!mobileNavOpen}
                 onClick={() => setMobileNavOpen(false)}
-            />
+            />*/}
 
             {/* ── Sidebar ── */}
             <aside
