@@ -2,11 +2,18 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import {useWebSocket} from "../../services/useWebSocket.js";
+
+import { useWebSocket }      from "../../services/useWebSocket.js";
+import { useBodyScrollLock } from "../../../../../smartfarming-ui/src/hooks/useBodyScrollLock.js";
+import { WS_TOPICS, WS_STATUS } from "../../../../../smartfarming-ui/src/config/websocket.js";
+
 import {
     getUsersCount,
     getFieldsCount,
     getHybridModelStatus,
+    getRecentCommands,
+    getAdminAlerts,
+    getWaterUsage,
     loadAllUsers,
     loadAllFields,
     loadAdminActivityLog,
@@ -16,7 +23,12 @@ import {
     getUserDetails,
     populateAdminOwnersDropdown,
 } from "../../services/dashboard.js";
+
+import MobileNavOverlay  from "../../../../../smartfarming-ui/src/components/MobileNavOverlay.jsx";
+import HybridStatusCard  from "../../../../../smartfarming-ui/src/components/HybridStatusCard.jsx";
+
 import "../../styles/admindashboard.css";
+import "../../styles/_dashboard-patches.css";
 
 // ── SVGs ──────────────────────────────────────────────────────
 
@@ -48,7 +60,7 @@ const AlertCircleIcon = () => (
     </svg>
 );
 
-// ── Helper: format today's date ───────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
 
 function formatHeaderDate() {
     return new Date().toLocaleDateString("en-US", {
@@ -56,22 +68,31 @@ function formatHeaderDate() {
     });
 }
 
-// ── Helper: status → badge class ─────────────────────────────
-
 function fieldStatusClass(status = "") {
-    const s = status.toLowerCase();
-    if (s === "irrigating" || s === "active")   return "badge--active";
-    if (s === "offline"    || s === "warning")  return "badge--crit";
+    const s = String(status).toLowerCase();
+    if (s === "irrigating" || s === "active")    return "badge--active";
+    if (s === "offline"    || s === "warning")   return "badge--crit";
     if (s === "idle"       || s === "scheduled") return "badge--warn";
     return "badge--info";
 }
 
 function activityStatusClass(status = "") {
-    const s = status.toLowerCase();
+    const s = String(status).toLowerCase();
     if (s === "success" || s === "completed") return "badge--active";
     if (s === "failed"  || s === "error")     return "badge--crit";
     if (s === "pending")                      return "badge--warn";
     return "badge--info";
+}
+
+// Live-status label from WS_STATUS enum
+function wsLabel(status) {
+    switch (status) {
+        case WS_STATUS.CONNECTED:    return "Connected";
+        case WS_STATUS.CONNECTING:   return "Connecting…";
+        case WS_STATUS.RECONNECTING: return "Reconnecting…";
+        case WS_STATUS.DISCONNECTED: return "Disconnected";
+        default:                     return "Idle";
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -82,22 +103,22 @@ export default function AdminDashboard() {
     const navigate = useNavigate();
 
     // ── Layout state ─────────────────────────────────────────
-    const [activeView,        setActiveView]        = useState("dashboard");
-    const [mobileNavOpen,     setMobileNavOpen]     = useState(false);
-    const [topbarDropOpen,    setTopbarDropOpen]    = useState(false);
+    const [activeView,     setActiveView]     = useState("dashboard");
+    const [mobileNavOpen,  setMobileNavOpen]  = useState(false);
+    const [topbarDropOpen, setTopbarDropOpen] = useState(false);
 
     // ── Dashboard data ────────────────────────────────────────
-    const [totalUsers,  setTotalUsers]  = useState("0");
-    const [totalFarms,  setTotalFarms]  = useState("—");
-    const [farmsOnline, setFarmsOnline] = useState("—");
-    const [waterUsage,  setWaterUsage]  = useState("—");
-    const [waterPct,    setWaterPct]    = useState("0%");
-    const [waterBarPct, setWaterBarPct] = useState(0);
-    const [commands,    setCommands]    = useState([]);
-    const [hybridStatus, setHybridStatus] = useState("ONLINE");
-    const [wsIndicatorHtml, setWsIndicatorHtml] = useState(
-        '<span class="live-dot" aria-hidden="true"></span>Disconnected'
-    );
+    const [totalUsers,   setTotalUsers]   = useState("—");
+    const [totalFarms,   setTotalFarms]   = useState("—");
+    const [farmsOnline,  setFarmsOnline]  = useState("—");
+    const [waterUsage,   setWaterUsage]   = useState("—");
+    const [waterPct,     setWaterPct]     = useState("—");
+    const [waterBarPct,  setWaterBarPct]  = useState(0);
+    const [commands,     setCommands]     = useState([]);
+    const [hybridStatus, setHybridStatus] = useState(null);  // null → UNKNOWN
+    const [hybridRefreshing, setHybridRefreshing] = useState(false);
+    const [wsStatus, setWsStatus] = useState(WS_STATUS.IDLE);
+
     const headerDate = formatHeaderDate();
 
     // ── Table data ────────────────────────────────────────────
@@ -109,63 +130,86 @@ export default function AdminDashboard() {
     const [owners,       setOwners]       = useState([]);
 
     // ── Modal — Add User ──────────────────────────────────────
-    const [userModalOpen,  setUserModalOpen]  = useState(false);
-    const [userModalLoading, setUserModalLoading] = useState(false);
-    const [userModalApiError, setUserModalApiError] = useState("");
-    const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "" });
-    const [userFormErrors, setUserFormErrors] = useState({});
+    const [userModalOpen,      setUserModalOpen]      = useState(false);
+    const [userModalLoading,   setUserModalLoading]   = useState(false);
+    const [userModalApiError,  setUserModalApiError]  = useState("");
+    const [userForm,           setUserForm]           = useState({ name: "", email: "", phone: "", role: "" });
+    const [userFormErrors,     setUserFormErrors]     = useState({});
 
     // ── Modal — Add Field ─────────────────────────────────────
-    const [fieldModalOpen,   setFieldModalOpen]   = useState(false);
-    const [fieldModalLoading, setFieldModalLoading] = useState(false);
+    const [fieldModalOpen,     setFieldModalOpen]     = useState(false);
+    const [fieldModalLoading,  setFieldModalLoading]  = useState(false);
     const [fieldModalApiError, setFieldModalApiError] = useState("");
-    const [fieldForm, setFieldForm] = useState({ farmName: "", size: "", location: "", ownerId: "" });
-    const [fieldFormErrors, setFieldFormErrors] = useState({});
+    const [fieldForm,          setFieldForm]          = useState({ farmName: "", size: "", location: "", ownerId: "" });
+    const [fieldFormErrors,    setFieldFormErrors]    = useState({});
 
-    const topbarDropRef  = useRef(null);
-    const totalFarmsRef  = useRef(0);
+    const topbarDropRef = useRef(null);
 
-    // Keep ref in sync with state (needed for WebSocket bridge)
-    useEffect(() => { totalFarmsRef.current = Number(totalFarms) || 0; }, [totalFarms]);
+    // ── Body scroll lock (drawer + modals) ────────────────────
+    useBodyScrollLock(mobileNavOpen || userModalOpen || fieldModalOpen);
 
     // ── WebSocket bridge ──────────────────────────────────────
-    // Exposes imperative update functions to the external webSocket.js file
     useWebSocket({
-        onWsStatus: (status) =>
-            setWsIndicatorHtml(
-                status === "Connected"
-                    ? '<span class="live-dot" aria-hidden="true"></span>Connected'
-                    : `<span class="live-dot" aria-hidden="true"></span>${status}`
-            ),
+        onStatus: setWsStatus,
+        subscriptions: {
+            // Live alerts → table + severity counts
+            [WS_TOPICS.admin.alerts]: (incoming) => {
+                const list = Array.isArray(incoming) ? incoming : [incoming];
+                setAlerts((prev) => {
+                    // Replace if backend sends an array (snapshot);
+                    // otherwise prepend a single new alert.
+                    return Array.isArray(incoming) ? list : [incoming, ...prev];
+                });
+                // Recompute counts from the *current* list each time
+                const ref = Array.isArray(incoming) ? list : [incoming, ...alerts];
+                const counts = { info: 0, warn: 0, crit: 0 };
+                ref.forEach((a) => {
+                    const sev = (a?.severity || "").toLowerCase();
+                    if (sev === "info")                              counts.info++;
+                    else if (sev === "warning"  || sev === "warn")   counts.warn++;
+                    else if (sev === "critical" || sev === "crit")   counts.crit++;
+                });
+                setAlertCounts(counts);
+            },
 
-        onAlerts: (incoming) => {
-            setAlerts(incoming);
-            const counts = { info: 0, warn: 0, crit: 0 };
-            incoming.forEach((a) => {
-                const sev = (a.severity || "").toLowerCase();
-                if (sev === "info")                            counts.info++;
-                else if (sev === "warning" || sev === "warn") counts.warn++;
-                else if (sev === "critical" || sev === "crit") counts.crit++;
-            });
-            setAlertCounts(counts);
-        },
+            // Activity logs → prepend new entries
+            [WS_TOPICS.admin.logs]: (log) => {
+                if (Array.isArray(log)) {
+                    setActivityLogs(log);
+                } else {
+                    setActivityLogs((prev) => [log, ...prev]);
+                }
+            },
 
-        // ── Logs ───────────────────────
-        onLogs: (log) => {
+            // Recent irrigation commands
+            [WS_TOPICS.admin.recentCommands]: (cmd) => {
+                if (Array.isArray(cmd)) {
+                    setCommands(cmd);
+                } else {
+                    setCommands((prev) => [cmd, ...prev].slice(0, 50));
+                }
+            },
 
-            console.log("LOG:", log);
+            // Hybrid model status pushed from the backend
+            [WS_TOPICS.admin.hybridStatus]: (payload) => {
+                if (!payload) return;
+                if (typeof payload === "string") setHybridStatus(payload);
+                else if (payload.status)          setHybridStatus(payload.status);
+            },
 
-            setActivityLogs((prev) => [log, ...prev]);
-
-        },
-
-        // ── Recent Commands ────────────
-        onRecentCommands: (command) => {
-
-            console.log("COMMAND:", command);
-
-            setCommands((prev) => [command, ...prev]);
-
+            // Dashboard stats (totals, online count, water usage)
+            [WS_TOPICS.admin.stats]: (s) => {
+                if (!s || typeof s !== "object") return;
+                if (s.totalUsers   != null) setTotalUsers(String(s.totalUsers));
+                if (s.totalFarms   != null) setTotalFarms(String(s.totalFarms));
+                if (s.farmsOnline  != null) setFarmsOnline(String(s.farmsOnline));
+                if (s.waterUsage   != null) setWaterUsage(String(s.waterUsage));
+                if (s.waterPct     != null) {
+                    setWaterPct(typeof s.waterPct === "string" ? s.waterPct : `${s.waterPct}%`);
+                    const n = parseFloat(String(s.waterPct).replace("%", ""));
+                    if (!Number.isNaN(n)) setWaterBarPct(Math.max(0, Math.min(100, n)));
+                }
+            },
         },
     });
 
@@ -177,7 +221,10 @@ export default function AdminDashboard() {
             }
         }
         function handleKeyDown(e) {
-            if (e.key === "Escape") setTopbarDropOpen(false);
+            if (e.key === "Escape") {
+                setTopbarDropOpen(false);
+                setMobileNavOpen(false);
+            }
         }
         document.addEventListener("click", handleClickOutside);
         document.addEventListener("keydown", handleKeyDown);
@@ -187,63 +234,99 @@ export default function AdminDashboard() {
         };
     }, []);
 
-    // ── Body overflow lock ────────────────────────────────────
+    // ── Initial REST hydration ────────────────────────────────
     useEffect(() => {
-        document.body.style.overflow =
-            mobileNavOpen || userModalOpen || fieldModalOpen ? "hidden" : "";
-    }, [mobileNavOpen, userModalOpen, fieldModalOpen]);
+        // Fire all top-card requests in parallel; failures fall back to "—".
+        let cancelled = false;
 
-    // ── Init ──────────────────────────────────────────────────
-    useEffect(() => {
-        const stored = localStorage.getItem("username");
-        if (stored) { /* userName is read from localStorage inline */ }
-        fetchTotalUsers();
-        fetchTotalFarms();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        Promise.allSettled([
+            getUsersCount(),
+            getFieldsCount(),
+            getHybridModelStatus(),
+            getRecentCommands(),
+            getAdminAlerts(),
+            getWaterUsage(),
+        ]).then(([usersR, farmsR, hybridR, cmdR, alertR, waterR]) => {
+            if (cancelled) return;
+
+            if (usersR.status === "fulfilled") {
+                const d = usersR.value;
+                setTotalUsers(String(d.totalUsers ?? d.message ?? "0"));
+            }
+
+            if (farmsR.status === "fulfilled") {
+                const d = farmsR.value;
+                setTotalFarms(String(d.totalFields ?? "—"));
+            }
+
+            if (hybridR.status === "fulfilled") {
+                setHybridStatus(hybridR.value?.status ?? null);
+            }
+
+            if (cmdR.status === "fulfilled" && Array.isArray(cmdR.value)) {
+                setCommands(cmdR.value);
+            }
+
+            if (alertR.status === "fulfilled" && Array.isArray(alertR.value)) {
+                setAlerts(alertR.value);
+                const counts = { info: 0, warn: 0, crit: 0 };
+                alertR.value.forEach((a) => {
+                    const sev = (a?.severity || "").toLowerCase();
+                    if (sev === "info")                              counts.info++;
+                    else if (sev === "warning"  || sev === "warn")   counts.warn++;
+                    else if (sev === "critical" || sev === "crit")   counts.crit++;
+                });
+                setAlertCounts(counts);
+            }
+
+            if (waterR.status === "fulfilled" && waterR.value) {
+                const d = waterR.value;
+                if (d.usage != null) setWaterUsage(String(d.usage));
+                if (d.pct   != null) {
+                    setWaterPct(typeof d.pct === "string" ? d.pct : `${d.pct}%`);
+                    const n = parseFloat(String(d.pct).replace("%", ""));
+                    if (!Number.isNaN(n)) setWaterBarPct(Math.max(0, Math.min(100, n)));
+                }
+                if (d.onlineFarms != null) setFarmsOnline(String(d.onlineFarms));
+            }
+        });
+
+        return () => { cancelled = true; };
     }, []);
 
-    // ── Data fetchers ─────────────────────────────────────────
-
-    const fetchTotalUsers = async () => {
-        try {
-            const data = await getUsersCount();
-            setTotalUsers(data.message ?? "0");
-        } catch { setTotalUsers("0"); }
-    };
-
-    const fetchTotalFarms = async () => {
-        try {
-            const data = await getFieldsCount();
-            setTotalFarms(data.totalFields ?? "—");
-        } catch { setTotalFarms("0"); }
-    };
+    // ── Data fetchers (used by view-switch + modals) ──────────
 
     const loadUsers = useCallback(async () => {
         try {
             const data = await loadAllUsers();
-            setUsers(data);
+            setUsers(Array.isArray(data) ? data : []);
         } catch { setUsers([]); }
     }, []);
 
     const loadFields = useCallback(async () => {
         try {
             const data = await loadAllFields();
-            setFields(data);
+            setFields(Array.isArray(data) ? data : []);
         } catch { setFields([]); }
     }, []);
 
     const loadActivityLog = useCallback(async () => {
         try {
             const data = await loadAdminActivityLog();
-            setActivityLogs(data);
+            setActivityLogs(Array.isArray(data) ? data : []);
         } catch { setActivityLogs([]); }
     }, []);
 
     const handleFetchHybridStatus = async () => {
+        setHybridRefreshing(true);
         try {
             const data = await getHybridModelStatus();
-            setHybridStatus(data.status ?? "OFFLINE");
-        } catch { setHybridStatus("OFFLINE"); }
+            setHybridStatus(data?.status ?? "OFFLINE");
+        } catch {
+            setHybridStatus("OFFLINE");
+        } finally {
+            setHybridRefreshing(false);
+        }
     };
 
     // ── Navigation ────────────────────────────────────────────
@@ -262,9 +345,7 @@ export default function AdminDashboard() {
     };
 
     // ── Mobile nav ────────────────────────────────────────────
-
-    const openMobileNav  = () => setMobileNavOpen(true);
-    const closeMobileNav = () => setMobileNavOpen(false);
+    const closeMobileNav  = () => setMobileNavOpen(false);
     const toggleMobileNav = () => setMobileNavOpen((v) => !v);
 
     // ── Topbar dropdown ───────────────────────────────────────
@@ -274,29 +355,21 @@ export default function AdminDashboard() {
         setTopbarDropOpen((v) => !v);
     };
 
-    const topbarAddUserClick = () => {
-        setTopbarDropOpen(false);
-        openAddUserModal();
-    };
-
-    const topbarAddFieldClick = () => {
-        setTopbarDropOpen(false);
-        openAddFieldModal();
-    };
+    const topbarAddUserClick  = () => { setTopbarDropOpen(false); openAddUserModal(); };
+    const topbarAddFieldClick = () => { setTopbarDropOpen(false); openAddFieldModal(); };
 
     // ── User status toggle ────────────────────────────────────
 
     const handleToggleUserStatus = (emailAddress, currentStatus) => {
-        const newStatus  = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-
+        const newStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
         updateUserStatus(emailAddress, newStatus)
             .then(() => loadUsers())
-            .catch(() => {});
+            .catch(() => { /* surfaced through reloaded row state */ });
     };
 
     const handleViewUser = async (email) => {
         try { await getUserDetails(email); }
-        catch {}
+        catch { /* future: open a detail panel */ }
     };
 
     // ── Add User Modal ────────────────────────────────────────
@@ -347,7 +420,7 @@ export default function AdminDashboard() {
         setFieldModalOpen(true);
         try {
             const data = await populateAdminOwnersDropdown();
-            setOwners(data);
+            setOwners(Array.isArray(data) ? data : []);
         } catch { setOwners([]); }
     }, []);
 
@@ -384,14 +457,24 @@ export default function AdminDashboard() {
 
     // ── Online ring calculation ───────────────────────────────
 
-    const circumference   = 88;
-    const totalFarmsNum   = Number(totalFarms) || 0;
-    const farmsOnlineNum  = Number(farmsOnline) || 0;
-    const ringFilled      = totalFarmsNum > 0
+    const circumference = 88;
+    const totalFarmsNum  = Number(totalFarms) || 0;
+    const farmsOnlineNum = Number(farmsOnline) || 0;
+    const ringFilled = totalFarmsNum > 0
         ? (farmsOnlineNum / totalFarmsNum) * circumference
         : 0;
 
-    const userName = localStorage.getItem("username") || "Admin User";
+    // Identity (was previously `username`; now `email`).
+    const userEmail = localStorage.getItem("email") || "—";
+
+    // Live status presentation
+    const wsLive    = wsStatus === WS_STATUS.CONNECTED;
+    const liveLabel = wsLabel(wsStatus);
+    const liveDotClass = wsLive
+        ? "live-dot"
+        : (wsStatus === WS_STATUS.RECONNECTING || wsStatus === WS_STATUS.CONNECTING
+            ? "live-dot live-dot--warn"
+            : "live-dot");
 
     // ─────────────────────────────────────────────────────────
     // RENDER
@@ -436,7 +519,7 @@ export default function AdminDashboard() {
                         </svg>
                     </button>
 
-                    {!topbarDropOpen ? null : (
+                    {topbarDropOpen && (
                         <div className="topbar-dropdown" id="topbarDropdown"
                              role="menu" aria-label="Admin quick actions">
                             <button className="topbar-dropdown-item" role="menuitem"
@@ -467,22 +550,13 @@ export default function AdminDashboard() {
                 </div>
             </header>
 
-            {/* Mobile overlay
-            <div
-                className={`nav-overlay ${mobileNavOpen ? "visible" : ""}`}
-                onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                        setMobileNavOpen(false);
-                    }
-                }}
-            />*/}
+            {/* Mobile overlay — restored. Clicking it closes the sidebar. */}
+            <MobileNavOverlay open={mobileNavOpen} onClose={closeMobileNav} />
 
             {/* ── Sidebar ── */}
             <aside className={`sidebar${mobileNavOpen ? " sidebar--open" : ""}`}
                    id="sidebar"
-                   aria-label="Main navigation"
-                   onClick={(e) => e.stopPropagation()}
-                   >
+                   aria-label="Main navigation">
 
                 <div className="sidebar-logo">
                     <SproutIcon />
@@ -528,7 +602,8 @@ export default function AdminDashboard() {
                             ),
                         },
                         {
-                            id: "alerts", label: "Alerts", badge: 3,
+                            id: "alerts", label: "Alerts",
+                            badge: (alertCounts.warn + alertCounts.crit) || null,
                             icon: (
                                 <svg viewBox="0 0 20 20" fill="none" width="18" height="18">
                                     <path d="M10 2L11.8 7H17L12.9 10.1L14.6 15L10 12L5.4 15L7.1 10.1L3 7H8.2L10 2Z"
@@ -566,7 +641,7 @@ export default function AdminDashboard() {
                 <div className="sidebar-admin-pill">
                     <span className="admin-avatar" aria-hidden="true">A</span>
                     <div className="admin-info">
-                        <span className="admin-name">{userName}</span>
+                        <span className="admin-name">{userEmail}</span>
                         <span className="admin-role">System Administrator</span>
                     </div>
                     <span className="admin-status-dot" aria-label="Online" title="Online" />
@@ -596,33 +671,12 @@ export default function AdminDashboard() {
                     <div className="bg-grid" />
                 </div>
 
-                {/* Floating Hybrid Model Status */}
-                <div className="hybrid-card" role="status"
-                     aria-label="Hybrid model system status" aria-live="polite">
-                    <div className="hybrid-icon" aria-hidden="true">
-                        <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
-                            <path d="M10 2L12.4 7.4H18L13.5 10.8L15.3 16L10 12.7L4.7 16L6.5 10.8L2 7.4H7.6L10 2Z"
-                                  fill="currentColor" opacity=".8" />
-                        </svg>
-                    </div>
-                    <div className="hybrid-info">
-                        <span className="hybrid-label">Hybrid Model</span>
-                        <span className={`hybrid-status hybrid-status--${hybridStatus === "ONLINE" ? "online" : "offline"}`}>
-              <span className={`hybrid-dot hybrid-dot--${hybridStatus === "ONLINE" ? "online" : "offline"}`}
-                    aria-hidden="true" />
-              <span>{hybridStatus}</span>
-            </span>
-                    </div>
-                    <button className="hybrid-toggle"
-                            aria-label="Toggle hybrid model status"
-                            title="Toggle status"
-                            onClick={handleFetchHybridStatus}>
-                        <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
-                            <path d="M8 1V4M8 12V15M1 8H4M12 8H15M3 3L5 5M11 11L13 13M13 3L11 5M5 11L3 13"
-                                  stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                        </svg>
-                    </button>
-                </div>
+                {/* Floating Hybrid Model Status — now a real component */}
+                <HybridStatusCard
+                    status={hybridStatus}
+                    onRefresh={handleFetchHybridStatus}
+                    refreshing={hybridRefreshing}
+                />
 
                 {/* ════════════════════════════════════════════
             VIEW: DASHBOARD
@@ -637,7 +691,10 @@ export default function AdminDashboard() {
                             <p className="view-subtitle">System overview and live monitoring</p>
                         </div>
                         <div className="view-header-meta">
-                            <span className="live-badge" dangerouslySetInnerHTML={{ __html: wsIndicatorHtml }} />
+                            <span className="live-badge">
+                                <span className={liveDotClass} aria-hidden="true" />
+                                {liveLabel}
+                            </span>
                             <span className="header-date">{headerDate}</span>
                         </div>
                     </div>
@@ -671,13 +728,6 @@ export default function AdminDashboard() {
                             <div className="scard-body">
                                 <span className="scard-value">{totalFarms}</span>
                                 <span className="scard-label">Active Farms</span>
-                            </div>
-                            <div className="scard-trend scard-trend--up" aria-label="Up 4% this week">
-                                <svg viewBox="0 0 12 12" fill="none" width="10" height="10">
-                                    <path d="M2 9L6 3L10 9" stroke="currentColor" strokeWidth="1.5"
-                                          strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                4%
                             </div>
                         </article>
 
@@ -757,13 +807,13 @@ export default function AdminDashboard() {
                                     ? <tr><td colSpan={4} className="table-empty">No commands yet.</td></tr>
                                     : commands.map((cmd, i) => (
                                         <tr key={i}>
-                                            <td className="cell-mono">{cmd.time}</td>
-                                            <td className="cell-bold">{cmd.farm}</td>
-                                            <td>{cmd.command}</td>
+                                            <td className="cell-mono">{cmd.time ?? "—"}</td>
+                                            <td className="cell-bold">{cmd.farm ?? "—"}</td>
+                                            <td>{cmd.command ?? "—"}</td>
                                             <td>
                           <span className={`trigger-chip ${cmd.trigger === "Hybrid-model"
                               ? "trigger-chip--model" : "trigger-chip--schedule"}`}>
-                            {cmd.trigger}
+                            {cmd.trigger ?? "—"}
                           </span>
                                             </td>
                                         </tr>
@@ -812,15 +862,15 @@ export default function AdminDashboard() {
                                     : users.length === 0
                                         ? <tr><td colSpan={6} className="table-empty">No users found.</td></tr>
                                         : users.map((user) => {
-                                            const isActive   = user.status === "ACTIVE";
-                                            const roleClass  = user.role === "ADMIN" ? "role-badge--admin" : "role-badge--manager";
+                                            const isActive    = user.status === "ACTIVE";
+                                            const roleClass   = user.role === "ADMIN" ? "role-badge--admin" : "role-badge--manager";
                                             const statusClass = isActive ? "badge--active" : "badge--inactive";
                                             return (
-                                                <tr key={user.id}>
-                                                    <td><span className="cell-bold">{user.userName}</span></td>
-                                                    <td>{user.emailAddress}</td>
-                                                    <td><span className="cell-muted">{user.phoneNumber}</span></td>
-                                                    <td><span className={`role-badge ${roleClass}`}>{user.role}</span></td>
+                                                <tr key={user.id ?? user.emailAddress}>
+                                                    <td><span className="cell-bold">{user.userName ?? "—"}</span></td>
+                                                    <td>{user.emailAddress ?? "—"}</td>
+                                                    <td><span className="cell-muted">{user.phoneNumber ?? "—"}</span></td>
+                                                    <td><span className={`role-badge ${roleClass}`}>{user.role ?? "—"}</span></td>
                                                     <td>
                             <span className={`badge ${statusClass}`}>
                               <span className="badge-dot-sm" />
@@ -883,14 +933,14 @@ export default function AdminDashboard() {
                                     : fields.length === 0
                                         ? <tr><td colSpan={4} className="table-empty">No fields registered.</td></tr>
                                         : fields.map((field, i) => (
-                                            <tr key={i}>
-                                                <td className="cell-mono">{field.fieldId} </td>
-                                                <td><span className="cell-bold">{field.fieldName}</span></td>
-                                                <td>{field.location}</td>
+                                            <tr key={field.fieldId ?? i}>
+                                                <td className="cell-mono">{field.fieldId ?? "—"}</td>
+                                                <td><span className="cell-bold">{field.fieldName ?? "—"}</span></td>
+                                                <td>{field.location ?? "—"}</td>
                                                 <td>
                           <span className={`badge ${fieldStatusClass(field.status)}`}>
                             <span className="badge-dot-sm" />
-                              {field.status}
+                              {field.status ?? "—"}
                           </span>
                                                 </td>
                                             </tr>
@@ -948,21 +998,19 @@ export default function AdminDashboard() {
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {!alerts
+                                {alerts.length === 0
                                     ? <tr><td colSpan={3} className="table-empty">No alerts.</td></tr>
-                                    : alerts.length === 0
-                                        ? <tr><td colSpan={3} className="table-empty">No alerts.</td></tr>
-                                        : alerts.map((alert, i) => (
-                                            <tr key={i}>
-                                                <td className="cell-mono">{alert.time}</td>
-                                                <td>{alert.message}</td>
-                                                <td>
+                                    : alerts.map((alert, i) => (
+                                        <tr key={i}>
+                                            <td className="cell-mono">{alert.time ?? "—"}</td>
+                                            <td>{alert.message ?? "—"}</td>
+                                            <td>
                           <span className={`sev-badge sev-badge--${(alert.severity || "info").toLowerCase()}`}>
-                            {alert.severity}
+                            {alert.severity ?? "—"}
                           </span>
-                                                </td>
-                                            </tr>
-                                        ))
+                                            </td>
+                                        </tr>
+                                    ))
                                 }
                                 </tbody>
                             </table>
@@ -1009,13 +1057,13 @@ export default function AdminDashboard() {
                                         ? <tr><td colSpan={4} className="table-empty">No recent activity recorded.</td></tr>
                                         : activityLogs.map((log, i) => (
                                             <tr key={i}>
-                                                <td className="cell-mono">{log.time}</td>
-                                                <td><span className="cell-bold">{log.action}</span></td>
-                                                <td className="cell-muted">{log.message}</td>
+                                                <td className="cell-mono">{log.time ?? "—"}</td>
+                                                <td><span className="cell-bold">{log.action ?? "—"}</span></td>
+                                                <td className="cell-muted">{log.message ?? "—"}</td>
                                                 <td>
                           <span className={`badge ${activityStatusClass(log.status)}`}>
                             <span className="badge-dot-sm" />
-                              {log.status}
+                              {log.status ?? "—"}
                           </span>
                                                 </td>
                                             </tr>

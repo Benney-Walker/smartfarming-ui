@@ -1,0 +1,61 @@
+.hybrid-status--reconnecting,
+.hybrid-status--connecting {
+    color: var(--warn, #f59e0b);
+}
+.hybrid-dot--reconnecting,
+.hybrid-dot--connecting {
+    background: var(--warn, #f59e0b);
+    animation: pulseDot 1.4s ease-in-out infinite;
+}
+.hybrid-status--unknown {
+    color: var(--n-500, #6b7280);
+}
+.hybrid-dot--unknown {
+    background: var(--n-400, #9ca3af);
+    animation: none;
+}
+
+/* Slight breathing room around the toggle when disabled — avoids
+   the button looking abandoned when refresh is in-flight.        */
+.hybrid-toggle:disabled {
+    opacity: .55;
+    cursor: progress;
+}
+
+/* ── Mobile-nav overlay safety ───────────────────────────────── */
+/* The overlay is positioned by the existing stylesheets; this just
+   guarantees it stays *below* the sidebar (z 300 vs 280) and never
+   captures clicks while invisible — fixes the "frozen overlay"
+   class of bug listed in the brief.                                */
+
+.nav-overlay {
+    pointer-events: none;
+}
+.nav-overlay.open,
+.nav-overlay.visible {
+    pointer-events: auto;
+}
+
+/* ── Table horizontal-scroll safety on very small viewports ───── */
+/* Defensive belt-and-braces in case any descendant overrides
+   overflow: x. Prevents the whole page from picking up the table's
+   horizontal scrollbar.                                            */
+
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+}
+
+/* Body never grows wider than the viewport, regardless of an inner
+   element accidentally overflowing.                                */
+html, body {
+    overflow-x: hidden;
+}
+
+/* ── Field-status helper row class (farmer dashboard "View All") ─ */
+/* Used by the new field table to render an "Active sensors" cell.
+   No new palette — reuses the existing muted color tokens.        */
+
+.cell-right { text-align: right; }
+.cell-center { text-align: center; }

@@ -1,110 +1,33 @@
 // ===== File: FarmManagerDashboard.jsx =====
+//
+// Farm-manager dashboard. Reflects ONLY data coming from the backend
+// (REST + STOMP/SockJS WebSocket). Every panel renders loading or "—"
+// placeholders until data arrives — there are no hardcoded sample
+// rows, no fabricated counts, no synthesized analytics.
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWebSocket } from "../../services/useWebSocket.js";
+
+import { useWebSocket }      from "../../services/useWebSocket.js";
+import { useBodyScrollLock } from "../../../../../smartfarming-ui/src/hooks/useBodyScrollLock.js";
+import { WS_TOPICS, WS_STATUS } from "../../../../../smartfarming-ui/src/config/websocket.js";
+
+import {
+    getFarmerStats,
+    getFarmerFields,
+    getFarmerSensors,
+    getRecentIrrigations,
+    getIrrigationHistory,
+    getFarmerAlerts,
+    getSoilSnapshot,
+} from "../../services/farmer.js";
+
+import MobileNavOverlay from "../../../../../smartfarming-ui/src/components/MobileNavOverlay.jsx";
+
 import "../../styles/farmmanagerdashboard.css";
+import "../../styles/_dashboard-patches.css";
 
-// ── Static mock data (replace with API calls when backend is ready) ──
-
-const FIELDS = [
-    { id: 1, name: "Sunrise Block A",  location: "Eastern Region",  size: "4.2 ha",  status: "Active"   },
-    { id: 2, name: "Sunrise Block B",  location: "Eastern Region",  size: "3.8 ha",  status: "Active"   },
-    { id: 3, name: "Northgate Zone 1", location: "Northern Region", size: "6.0 ha",  status: "Active"   },
-    { id: 4, name: "Northgate Zone 2", location: "Northern Region", size: "5.5 ha",  status: "Inactive" },
-    { id: 5, name: "Delta Farm A",     location: "Volta Region",    size: "8.3 ha",  status: "Active"   },
-    { id: 6, name: "Delta Farm B",     location: "Volta Region",    size: "7.9 ha",  status: "Active"   },
-    { id: 7, name: "Riverview Zone 1", location: "Western Region",  size: "3.0 ha",  status: "Active"   },
-    { id: 8, name: "Greenacre Plot",   location: "Ashanti Region",  size: "10.5 ha", status: "Inactive" },
-];
-
-const SENSORS = [
-    { name: "SM-101", field: "Sunrise Block A",  type: "Soil Moisture",    status: "Online",  reading: "72%",     updated: "2 min ago"  },
-    { name: "ST-102", field: "Sunrise Block A",  type: "Soil Temperature", status: "Online",  reading: "23.4°C",  updated: "2 min ago"  },
-    { name: "HM-103", field: "Sunrise Block B",  type: "Humidity",         status: "Online",  reading: "65%",     updated: "3 min ago"  },
-    { name: "SM-201", field: "Northgate Zone 1", type: "Soil Moisture",    status: "Online",  reading: "58%",     updated: "4 min ago"  },
-    { name: "ST-202", field: "Northgate Zone 1", type: "Soil Temperature", status: "Offline", reading: "—",       updated: "18 min ago" },
-    { name: "SM-301", field: "Delta Farm A",     type: "Soil Moisture",    status: "Online",  reading: "81%",     updated: "1 min ago"  },
-    { name: "FL-302", field: "Delta Farm A",     type: "Flow Rate",        status: "Online",  reading: "3.2 L/s", updated: "1 min ago"  },
-    { name: "SM-401", field: "Delta Farm B",     type: "Soil Moisture",    status: "Online",  reading: "44%",     updated: "6 min ago"  },
-    { name: "HM-402", field: "Delta Farm B",     type: "Humidity",         status: "Offline", reading: "—",       updated: "42 min ago" },
-    { name: "SM-501", field: "Riverview Zone 1", type: "Soil Moisture",    status: "Online",  reading: "67%",     updated: "5 min ago"  },
-    { name: "ST-601", field: "Greenacre Plot",   type: "Soil Temperature", status: "Online",  reading: "26.1°C",  updated: "3 min ago"  },
-    { name: "SM-701", field: "Northgate Zone 2", type: "Soil Moisture",    status: "Offline", reading: "—",       updated: "2 hrs ago"  },
-];
-
-const IRRIGATION_LOGS = [
-    { field: "Sunrise Block A",  mode: "AUTO",   start: "09:42 AM", end: "10:10 AM", duration: "28 min", feedback: "SUCCESS"  },
-    { field: "Delta Farm A",     mode: "MANUAL", start: "09:05 AM", end: "09:45 AM", duration: "40 min", feedback: "SUCCESS"  },
-    { field: "Northgate Zone 1", mode: "AUTO",   start: "08:30 AM", end: "09:00 AM", duration: "30 min", feedback: "SUCCESS"  },
-    { field: "Delta Farm B",     mode: "AUTO",   start: "08:00 AM", end: "08:22 AM", duration: "22 min", feedback: "CANCELED" },
-    { field: "Riverview Zone 1", mode: "MANUAL", start: "07:15 AM", end: "07:55 AM", duration: "40 min", feedback: "SUCCESS"  },
-    { field: "Sunrise Block B",  mode: "AUTO",   start: "07:00 AM", end: "07:12 AM", duration: "12 min", feedback: "FAILED"   },
-    { field: "Greenacre Plot",   mode: "MANUAL", start: "06:30 AM", end: "07:05 AM", duration: "35 min", feedback: "SUCCESS"  },
-    { field: "Northgate Zone 1", mode: "AUTO",   start: "06:00 AM", end: "06:28 AM", duration: "28 min", feedback: "SUCCESS"  },
-    { field: "Delta Farm A",     mode: "AUTO",   start: "05:30 AM", end: "06:05 AM", duration: "35 min", feedback: "SUCCESS"  },
-    { field: "Sunrise Block A",  mode: "AUTO",   start: "05:00 AM", end: "05:18 AM", duration: "18 min", feedback: "FAILED"   },
-];
-
-const RECENT_IRRIGATIONS = [
-    { time: "09:42 AM", field: "Sunrise Block A",  action: "START", trigger: "AUTO",   status: "SUCCESS" },
-    { time: "09:05 AM", field: "Delta Farm A",     action: "START", trigger: "MANUAL", status: "SUCCESS" },
-    { time: "08:30 AM", field: "Northgate Zone 1", action: "START", trigger: "AUTO",   status: "SUCCESS" },
-    { time: "08:22 AM", field: "Delta Farm B",     action: "STOP",  trigger: "AUTO",   status: "SUCCESS" },
-    { time: "08:00 AM", field: "Riverview Zone 1", action: "START", trigger: "MANUAL", status: "SUCCESS" },
-    { time: "07:55 AM", field: "Sunrise Block B",  action: "STOP",  trigger: "HYBRID", status: "FAILED"  },
-];
-
-const INITIAL_ALERTS = [
-    { time: "09:50 AM", field: "Delta Farm B",     message: "Soil moisture below 40% — irrigation recommended",     severity: "High"   },
-    { time: "09:38 AM", field: "Northgate Zone 2", message: "Sensor ST-202 has gone offline",                      severity: "Medium" },
-    { time: "09:22 AM", field: "All Zones",        message: "Daily water usage at 68% of allocated limit",         severity: "Low"    },
-    { time: "08:45 AM", field: "Sunrise Block A",  message: "Scheduled irrigation completed successfully",          severity: "Low"    },
-    { time: "07:55 AM", field: "Sunrise Block B",  message: "Irrigation failed — check valve connection",          severity: "High"   },
-    { time: "07:40 AM", field: "Delta Farm A",     message: "Soil temperature spike detected (28°C threshold)",    severity: "Medium" },
-    { time: "07:15 AM", field: "Northgate Zone 2", message: "Sensor HM-402 unresponsive for over 30 minutes",     severity: "High"   },
-    { time: "06:58 AM", field: "Riverview Zone 1", message: "Humidity reading above normal range (78%)",           severity: "Low"    },
-    { time: "06:30 AM", field: "Greenacre Plot",   message: "Flow rate drop detected during irrigation session",   severity: "Medium" },
-];
-
-const SOIL_SNAPSHOT = {
-    moisture: 72, temperature: "23.4°C", temperaturePct: 47,
-    humidity: 65, updatedAt: "09:52 AM",
-};
-
-// ── Derived stats ─────────────────────────────────────────────
-
-const ACTIVE_FIELDS  = FIELDS.filter(f => f.status === "Active").length;
-const ONLINE_SENSORS = SENSORS.filter(s => s.status === "Online").length;
-const AVG_MOISTURE   = Math.round(
-    SENSORS.filter(s => s.type === "Soil Moisture" && s.status === "Online")
-        .reduce((sum, s) => sum + parseInt(s.reading), 0) /
-    SENSORS.filter(s => s.type === "Soil Moisture" && s.status === "Online").length
-);
-const FIELD_NAMES_UNIQUE = [...new Set(IRRIGATION_LOGS.map(r => r.field))].sort();
-
-// ── Animated counter hook ─────────────────────────────────────
-
-function useAnimatedCount(target, suffix = "", delay = 0) {
-    const [display, setDisplay] = useState("—");
-    useEffect(() => {
-        const tid = setTimeout(() => {
-            const dur = 600;
-            const t0  = performance.now();
-            function tick(now) {
-                const p   = Math.min((now - t0) / dur, 1);
-                const val = Math.round(p * target);
-                setDisplay(val.toLocaleString() + suffix);
-                if (p < 1) requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
-        }, delay);
-        return () => clearTimeout(tid);
-    }, [target, suffix, delay]);
-    return display;
-}
-
-// ── Sprout SVG ────────────────────────────────────────────────
+// ── Inline SVGs ───────────────────────────────────────────────
 
 const SproutIcon = ({ width = 36, height = 36 }) => (
     <svg viewBox="0 0 32 32" fill="none" width={width} height={height} aria-hidden="true">
@@ -115,8 +38,6 @@ const SproutIcon = ({ width = 36, height = 36 }) => (
     </svg>
 );
 
-// ── Field icon SVG ────────────────────────────────────────────
-
 const FieldIcon = ({ width = 16, height = 16 }) => (
     <svg viewBox="0 0 20 20" fill="none" width={width} height={height}>
         <path d="M2 16L6 8L10 12L14 6L18 10" stroke="currentColor" strokeWidth="1.5"
@@ -124,6 +45,48 @@ const FieldIcon = ({ width = 16, height = 16 }) => (
         <path d="M2 18H18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
 );
+
+// ── Animated counter ─────────────────────────────────────────
+// Re-runs whenever the target value changes — counters now reflect
+// live backend data instead of hardcoded constants.
+
+function useAnimatedCount(target, suffix = "") {
+    const hasTarget = target != null && !Number.isNaN(Number(target));
+    const [display, setDisplay] = useState("—");
+
+    useEffect(() => {
+        if (!hasTarget) {
+            // Schedule (don't synchronously set) the placeholder so we
+            // don't trigger a cascading render inside the effect body.
+            const id = requestAnimationFrame(() => setDisplay("—"));
+            return () => cancelAnimationFrame(id);
+        }
+        const dur = 600;
+        const start = performance.now();
+        let raf;
+        function tick(now) {
+            const p   = Math.min((now - start) / dur, 1);
+            const val = Math.round(p * Number(target));
+            setDisplay(val.toLocaleString() + suffix);
+            if (p < 1) raf = requestAnimationFrame(tick);
+        }
+        raf = requestAnimationFrame(tick);
+        return () => raf && cancelAnimationFrame(raf);
+    }, [hasTarget, target, suffix]);
+
+    return display;
+}
+
+// Friendly WS status label
+function wsBadgeLabel(status) {
+    switch (status) {
+        case WS_STATUS.CONNECTED:    return "Live Data";
+        case WS_STATUS.CONNECTING:   return "Connecting…";
+        case WS_STATUS.RECONNECTING: return "Reconnecting…";
+        case WS_STATUS.DISCONNECTED: return "Disconnected";
+        default:                     return "Idle";
+    }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Main Component
@@ -136,87 +99,186 @@ export default function FarmManagerDashboard() {
     const [activeView,    setActiveView]    = useState("dashboard");
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-    // ── WebSocket state ───────────────────────────────────────
-    const [wsStatus, setWsStatus] = useState("Disconnected");
-    const [alerts,   setAlerts]   = useState(INITIAL_ALERTS);
+    // ── Connection state ──────────────────────────────────────
+    const [wsStatus, setWsStatus] = useState(WS_STATUS.IDLE);
+
+    // ── Live data (initial: null/empty until REST hydrates) ───
+    const [fields,             setFields]             = useState(null);   // null = loading
+    const [sensors,            setSensors]            = useState(null);
+    const [irrigationHistory,  setIrrigationHistory]  = useState(null);
+    const [recentIrrigations,  setRecentIrrigations]  = useState(null);
+    const [alerts,             setAlerts]             = useState(null);
+    const [soil,               setSoil]               = useState(null);   // { moisture, temperature, temperaturePct, humidity, updatedAt }
+    const [stats,              setStats]              = useState(null);   // optional aggregate
 
     // ── Irrigation filter ─────────────────────────────────────
     const [fieldFilter, setFieldFilter] = useState("all");
 
-    // ── Moisture ring (CSS transition driven) ─────────────────
-    const [ringDash, setRingDash]     = useState("0 100.53");
-    const [soilBars, setSoilBars]     = useState({ moisture: 0, temp: 0, humidity: 0 });
-    const [countersReady, setCountersReady] = useState(false);
+    // ── Body scroll lock for mobile drawer ────────────────────
+    useBodyScrollLock(mobileNavOpen);
 
-    // Animated summary card values
-    const fieldsDisplay   = useAnimatedCount(ACTIVE_FIELDS,   "",  countersReady ? 0 : 9999);
-    const sensorsDisplay  = useAnimatedCount(ONLINE_SENSORS,  "",  countersReady ? 0 : 9999);
-    const irrigDisplay    = useAnimatedCount(IRRIGATION_LOGS.length, "", countersReady ? 0 : 9999);
-    const moistureDisplay = useAnimatedCount(AVG_MOISTURE,    "%", countersReady ? 0 : 9999);
-
-    // Header date
+    // ── Header date (presentational only) ─────────────────────
     const headerDate = new Date().toLocaleDateString("en-GB", {
         weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
 
-    // Alert counts
-    const alertCounts = alerts.reduce(
-        (acc, a) => {
-            if (a.severity === "Low")    acc.low++;
-            if (a.severity === "Medium") acc.med++;
-            if (a.severity === "High")   acc.high++;
-            return acc;
-        },
-        { low: 0, med: 0, high: 0 }
-    );
+    // ── Derived counts (computed from live state) ─────────────
+    const activeFieldsCount = useMemo(() => {
+        if (stats?.activeFields != null) return Number(stats.activeFields);
+        if (!Array.isArray(fields))      return null;
+        return fields.filter(f => String(f.status).toLowerCase() === "active").length;
+    }, [stats, fields]);
+
+    const onlineSensorsCount = useMemo(() => {
+        if (stats?.onlineSensors != null) return Number(stats.onlineSensors);
+        if (!Array.isArray(sensors))      return null;
+        return sensors.filter(s => String(s.status).toLowerCase() === "online").length;
+    }, [stats, sensors]);
+
+    const irrigationsTodayCount = useMemo(() => {
+        if (stats?.irrigationsToday != null) return Number(stats.irrigationsToday);
+        if (!Array.isArray(irrigationHistory)) return null;
+        return irrigationHistory.length;
+    }, [stats, irrigationHistory]);
+
+    const avgMoisture = useMemo(() => {
+        if (stats?.avgMoisture != null) return Number(stats.avgMoisture);
+        if (!Array.isArray(sensors))    return null;
+        const moistures = sensors
+            .filter(s => String(s.type).toLowerCase().includes("moisture")
+                && String(s.status).toLowerCase() === "online")
+            .map(s => parseInt(String(s.reading).replace(/[^\d.-]/g, ""), 10))
+            .filter(n => !Number.isNaN(n));
+        if (moistures.length === 0) return null;
+        return Math.round(moistures.reduce((a, b) => a + b, 0) / moistures.length);
+    }, [stats, sensors]);
+
+    // Animated counters — reflect live values, "—" until data arrives.
+    const fieldsDisplay   = useAnimatedCount(activeFieldsCount,    "");
+    const sensorsDisplay  = useAnimatedCount(onlineSensorsCount,   "");
+    const irrigDisplay    = useAnimatedCount(irrigationsTodayCount,"");
+    const moistureDisplay = useAnimatedCount(avgMoisture,          "%");
+
+    // Moisture ring + soil bars (CSS transitions)
+    const ringDash = useMemo(() => {
+        const circ = 100.53;
+        if (avgMoisture == null) return "0 100.53";
+        const filled = ((Math.max(0, Math.min(100, avgMoisture)) / 100) * circ).toFixed(1);
+        return `${filled} ${(circ - filled).toFixed(1)}`;
+    }, [avgMoisture]);
+
+    const soilBars = useMemo(() => ({
+        moisture: soil?.moisture       ?? 0,
+        temp:     soil?.temperaturePct ?? 0,
+        humidity: soil?.humidity       ?? 0,
+    }), [soil]);
+
+    // Unique field names for the filter dropdown — from live data.
+    const fieldNamesUnique = useMemo(() => {
+        if (!Array.isArray(irrigationHistory)) return [];
+        const set = new Set(irrigationHistory.map(r => r.field).filter(Boolean));
+        return Array.from(set).sort();
+    }, [irrigationHistory]);
+
+    // Alert counts (badge + summary pills)
+    const alertCounts = useMemo(() => {
+        const c = { low: 0, med: 0, high: 0 };
+        if (!Array.isArray(alerts)) return c;
+        for (const a of alerts) {
+            const s = String(a.severity || "").toLowerCase();
+            if (s === "low")    c.low++;
+            else if (s === "medium" || s === "med") c.med++;
+            else if (s === "high")  c.high++;
+        }
+        return c;
+    }, [alerts]);
     const alertNavCount = alertCounts.high + alertCounts.med;
 
-    // ── WebSocket callbacks ───────────────────────────────────
+    // Irrigation rows filtered by the dropdown
+    const irrigRows = useMemo(() => {
+        if (!Array.isArray(irrigationHistory)) return null;
+        if (fieldFilter === "all") return irrigationHistory;
+        return irrigationHistory.filter(r => r.field === fieldFilter);
+    }, [irrigationHistory, fieldFilter]);
 
-    const handleWsStatus = useCallback((status) => setWsStatus(status), []);
+    // ── WebSocket: scoped to farmer topics ────────────────────
+    useWebSocket({
+        onStatus: setWsStatus,
+        subscriptions: {
+            [WS_TOPICS.farmer.alerts]: (payload) => {
+                if (Array.isArray(payload)) setAlerts(payload);
+                else setAlerts((prev) => [payload, ...(Array.isArray(prev) ? prev : [])]);
+            },
+            [WS_TOPICS.farmer.sensors]: (payload) => {
+                if (Array.isArray(payload)) setSensors(payload);
+                else setSensors((prev) => {
+                    // Replace-by-name if we know this sensor, otherwise prepend.
+                    if (!Array.isArray(prev)) return [payload];
+                    const idx = prev.findIndex(s => s.name === payload.name);
+                    if (idx === -1) return [payload, ...prev];
+                    const next = prev.slice();
+                    next[idx] = { ...next[idx], ...payload };
+                    return next;
+                });
+            },
+            [WS_TOPICS.farmer.soilData]: (payload) => {
+                if (!payload || typeof payload !== "object") return;
+                setSoil((prev) => ({ ...(prev || {}), ...payload }));
+            },
+            [WS_TOPICS.farmer.irrigation]: (payload) => {
+                if (Array.isArray(payload)) {
+                    setRecentIrrigations(payload);
+                } else {
+                    setRecentIrrigations((prev) => {
+                        const list = Array.isArray(prev) ? prev : [];
+                        return [payload, ...list].slice(0, 50);
+                    });
+                }
+            },
+            [WS_TOPICS.farmer.fieldStatus]: (payload) => {
+                if (Array.isArray(payload)) {
+                    setFields(payload);
+                } else if (payload?.id != null || payload?.name) {
+                    setFields((prev) => {
+                        if (!Array.isArray(prev)) return [payload];
+                        const idx = prev.findIndex(f =>
+                            (f.id != null && f.id === payload.id) || f.name === payload.name);
+                        if (idx === -1) return [payload, ...prev];
+                        const next = prev.slice();
+                        next[idx] = { ...next[idx], ...payload };
+                        return next;
+                    });
+                }
+            },
+        },
+    });
 
-    const handleAlerts = useCallback((incoming) => {
-        setAlerts(incoming);
-    }, []);
+    // ── Initial REST hydration ────────────────────────────────
+    useEffect(() => {
+        let cancelled = false;
 
-    try {
-        useWebSocket({
-            onWsStatus: handleWsStatus,
-            onAlerts: handleAlerts,
+        Promise.allSettled([
+            getFarmerStats(),
+            getFarmerFields(),
+            getFarmerSensors(),
+            getRecentIrrigations(),
+            getIrrigationHistory(),
+            getFarmerAlerts(),
+            getSoilSnapshot(),
+        ]).then(([statsR, fieldsR, sensorsR, recentR, historyR, alertsR, soilR]) => {
+            if (cancelled) return;
+
+            setStats(statsR.status === "fulfilled" ? (statsR.value || null) : null);
+            setFields(fieldsR.status === "fulfilled" && Array.isArray(fieldsR.value) ? fieldsR.value : []);
+            setSensors(sensorsR.status === "fulfilled" && Array.isArray(sensorsR.value) ? sensorsR.value : []);
+            setRecentIrrigations(recentR.status === "fulfilled" && Array.isArray(recentR.value) ? recentR.value : []);
+            setIrrigationHistory(historyR.status === "fulfilled" && Array.isArray(historyR.value) ? historyR.value : []);
+            setAlerts(alertsR.status === "fulfilled" && Array.isArray(alertsR.value) ? alertsR.value : []);
+            setSoil(soilR.status === "fulfilled" ? (soilR.value || null) : null);
         });
-    } catch (e) {
-        console.warn("WebSocket disabled:", e);
-    }
 
-    // ── Animations on mount ───────────────────────────────────
-
-    useEffect(() => {
-        setCountersReady(true);
-
-        // Soil bars — delayed so CSS transition fires
-        const t1 = setTimeout(() => {
-            setSoilBars({
-                moisture: SOIL_SNAPSHOT.moisture,
-                temp:     SOIL_SNAPSHOT.temperaturePct,
-                humidity: SOIL_SNAPSHOT.humidity,
-            });
-        }, 300);
-
-        // Moisture ring
-        const circ   = 100.53;
-        const filled = ((AVG_MOISTURE / 100) * circ).toFixed(1);
-        const t2 = setTimeout(() => {
-            setRingDash(`${filled} ${(circ - filled).toFixed(1)}`);
-        }, 250);
-
-        return () => { clearTimeout(t1); clearTimeout(t2); };
+        return () => { cancelled = true; };
     }, []);
-
-    // ── Body scroll lock ──────────────────────────────────────
-
-    useEffect(() => {
-        document.body.style.overflow = mobileNavOpen ? "hidden" : "";
-    }, [mobileNavOpen]);
 
     // ── Navigation ────────────────────────────────────────────
 
@@ -225,22 +287,23 @@ export default function FarmManagerDashboard() {
         setMobileNavOpen(false);
     };
 
+    const closeMobileNav = () => setMobileNavOpen(false);
+
     const handleLogout = () => {
         if (window.confirm("Are you sure you want to log out?")) {
             localStorage.clear();
-            navigate("/");
+            navigate("/login-page");
         }
     };
 
-    // ── Filtered irrigation rows ──────────────────────────────
+    // Escape closes the drawer (defensive — overlay click handles the rest)
+    useEffect(() => {
+        function onKey(e) { if (e.key === "Escape") setMobileNavOpen(false); }
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+    }, []);
 
-    const irrigRows = fieldFilter === "all"
-        ? IRRIGATION_LOGS
-        : IRRIGATION_LOGS.filter(r => r.field === fieldFilter);
-
-    // ─────────────────────────────────────────────────────────
-    // NAV ITEMS CONFIG
-    // ─────────────────────────────────────────────────────────
+    // ── Nav items ─────────────────────────────────────────────
 
     const NAV = [
         {
@@ -300,6 +363,13 @@ export default function FarmManagerDashboard() {
         },
     ];
 
+    // Avatar initials from email
+    const email   = localStorage.getItem("email") || "";
+    const initials = (email || "FM").trim().slice(0, 2).toUpperCase();
+
+    // Loading state helpers
+    const isLoading = (v) => v === null || v === undefined;
+
     // ─────────────────────────────────────────────────────────
     // RENDER
     // ─────────────────────────────────────────────────────────
@@ -326,19 +396,14 @@ export default function FarmManagerDashboard() {
                 </div>
                 <div className="topbar-actions">
                     <div className="topbar-user-pill">
-                        <span className="user-avatar-sm" aria-hidden="true">FM</span>
+                        <span className="user-avatar-sm" aria-hidden="true">{initials}</span>
                         <span className="user-name-sm">Farm Manager</span>
                     </div>
                 </div>
             </header>
 
-            {/* Mobile overlay
-            <div
-                className={`nav-overlay${mobileNavOpen ? " open" : ""}`}
-                id="navOverlay"
-                aria-hidden={!mobileNavOpen}
-                onClick={() => setMobileNavOpen(false)}
-            />*/}
+            {/* Mobile overlay — restored. */}
+            <MobileNavOverlay open={mobileNavOpen} onClose={closeMobileNav} />
 
             {/* ── Sidebar ── */}
             <aside
@@ -360,9 +425,9 @@ export default function FarmManagerDashboard() {
                 <div className="sidebar-divider" />
 
                 <div className="sidebar-user-pill">
-                    <span className="user-avatar" aria-hidden="true">FM</span>
+                    <span className="user-avatar" aria-hidden="true">{initials}</span>
                     <div className="user-info">
-                        <span className="user-name">Farm Manager</span>
+                        <span className="user-name">{email || "Farm Manager"}</span>
                         <span className="user-role">Field Operations</span>
                     </div>
                     <span className="user-online-dot" aria-label="Online" />
@@ -394,7 +459,9 @@ export default function FarmManagerDashboard() {
 
                 <div className="sidebar-sys-status">
                     <span className="sys-online-dot" />
-                    <span className="sys-status-text">Systems Nominal</span>
+                    <span className="sys-status-text">
+                        {wsStatus === WS_STATUS.CONNECTED ? "Systems Nominal" : wsBadgeLabel(wsStatus)}
+                    </span>
                 </div>
 
                 <div className="sidebar-logout-wrap">
@@ -437,7 +504,7 @@ export default function FarmManagerDashboard() {
                         <div className="view-header-right">
               <span className="live-chip">
                 <span className="live-dot" aria-hidden="true" />
-                  {wsStatus === "Connected" ? "Live Data" : wsStatus}
+                  {wsBadgeLabel(wsStatus)}
               </span>
                             <span className="date-chip">{headerDate}</span>
                         </div>
@@ -543,7 +610,9 @@ export default function FarmManagerDashboard() {
                                         </svg>
                                     </div>
                                     <div className="soil-metric-data">
-                                        <span className="soil-metric-value">{SOIL_SNAPSHOT.moisture}%</span>
+                                        <span className="soil-metric-value">
+                                            {soil?.moisture != null ? `${soil.moisture}%` : "—"}
+                                        </span>
                                         <span className="soil-metric-label">Soil Moisture</span>
                                         <div className="soil-metric-bar-wrap">
                                             <div className="soil-metric-bar"
@@ -562,7 +631,9 @@ export default function FarmManagerDashboard() {
                                         </svg>
                                     </div>
                                     <div className="soil-metric-data">
-                                        <span className="soil-metric-value">{SOIL_SNAPSHOT.temperature}</span>
+                                        <span className="soil-metric-value">
+                                            {soil?.temperature ?? "—"}
+                                        </span>
                                         <span className="soil-metric-label">Soil Temperature</span>
                                         <div className="soil-metric-bar-wrap">
                                             <div className="soil-metric-bar soil-metric-bar--temp"
@@ -582,7 +653,9 @@ export default function FarmManagerDashboard() {
                                         </svg>
                                     </div>
                                     <div className="soil-metric-data">
-                                        <span className="soil-metric-value">{SOIL_SNAPSHOT.humidity}%</span>
+                                        <span className="soil-metric-value">
+                                            {soil?.humidity != null ? `${soil.humidity}%` : "—"}
+                                        </span>
                                         <span className="soil-metric-label">Humidity</span>
                                         <div className="soil-metric-bar-wrap">
                                             <div className="soil-metric-bar soil-metric-bar--hum"
@@ -600,13 +673,15 @@ export default function FarmManagerDashboard() {
                                         </svg>
                                     </div>
                                     <div className="soil-metric-data">
-                    <span className="soil-metric-value soil-metric-value--sm">
-                      {SOIL_SNAPSHOT.updatedAt}
-                    </span>
+                                        <span className="soil-metric-value soil-metric-value--sm">
+                                            {soil?.updatedAt ?? "—"}
+                                        </span>
                                         <span className="soil-metric-label">Last Updated</span>
                                     </div>
-                                    <div className="ws-spinner" title="Awaiting WebSocket feed"
-                                         aria-label="Awaiting live sensor data" />
+                                    {wsStatus !== WS_STATUS.CONNECTED && (
+                                        <div className="ws-spinner" title={wsBadgeLabel(wsStatus)}
+                                             aria-label={wsBadgeLabel(wsStatus)} />
+                                    )}
                                 </div>
 
                             </div>
@@ -621,27 +696,35 @@ export default function FarmManagerDashboard() {
                                 </button>
                             </div>
                             <ul className="field-status-list" aria-label="Field status summary">
-                                {FIELDS.slice(0, 6).map((field) => {
-                                    const isActive = field.status === "Active";
-                                    return (
-                                        <li key={field.id} className="fsl-item">
-                                            <div className={`fsl-icon${isActive ? "" : " fsl-icon--placeholder"}`}
-                                                 aria-hidden="true">
-                                                <FieldIcon />
-                                            </div>
-                                            <div className="fsl-info">
-                                                <span className="fsl-name">{field.name}</span>
-                                                <span className="fsl-loc">{field.location} · {field.size}</span>
-                                            </div>
-                                            <div className="fsl-status">
-                        <span className={`badge ${isActive ? "badge--active" : "badge--inactive"}`}>
-                          <span className="bdot" />
-                            {isActive ? "Active" : "Inactive"}
-                        </span>
-                                            </div>
-                                        </li>
-                                    );
-                                })}
+                                {isLoading(fields)
+                                    ? <li className="fsl-item"><span className="cell-muted">Loading…</span></li>
+                                    : fields.length === 0
+                                        ? <li className="fsl-item"><span className="cell-muted">No fields registered yet.</span></li>
+                                        : fields.slice(0, 6).map((field) => {
+                                            const isActive = String(field.status).toLowerCase() === "active";
+                                            return (
+                                                <li key={field.id ?? field.name} className="fsl-item">
+                                                    <div className={`fsl-icon${isActive ? "" : " fsl-icon--placeholder"}`}
+                                                         aria-hidden="true">
+                                                        <FieldIcon />
+                                                    </div>
+                                                    <div className="fsl-info">
+                                                        <span className="fsl-name">{field.name ?? "—"}</span>
+                                                        <span className="fsl-loc">
+                                                            {field.location ?? "—"}
+                                                            {field.size ? ` · ${field.size}` : ""}
+                                                        </span>
+                                                    </div>
+                                                    <div className="fsl-status">
+                                                        <span className={`badge ${isActive ? "badge--active" : "badge--inactive"}`}>
+                                                            <span className="bdot" />
+                                                            {isActive ? "Active" : "Inactive"}
+                                                        </span>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })
+                                }
                             </ul>
                         </div>
 
@@ -670,27 +753,37 @@ export default function FarmManagerDashboard() {
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {RECENT_IRRIGATIONS.map((row, i) => (
-                                    <tr key={i}>
-                                        <td><span className="cell-mono">{row.time}</span></td>
-                                        <td><span className="cell-bold">{row.field}</span></td>
-                                        <td>
-                        <span className={`badge ${row.action === "START" ? "badge--start" : "badge--stop"}`}>
-                          <span className="bdot" />{row.action}
-                        </span>
-                                        </td>
-                                        <td>
-                        <span className={`trigger trigger--${row.trigger.toLowerCase()}`}>
-                          {row.trigger}
-                        </span>
-                                        </td>
-                                        <td>
-                        <span className={`badge ${row.status === "SUCCESS" ? "badge--success" : "badge--failed"}`}>
-                          <span className="bdot" />{row.status}
-                        </span>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {isLoading(recentIrrigations)
+                                    ? <tr><td colSpan={5} className="table-empty">Loading…</td></tr>
+                                    : recentIrrigations.length === 0
+                                        ? <tr><td colSpan={5} className="table-empty">No recent irrigation events.</td></tr>
+                                        : recentIrrigations.map((row, i) => {
+                                            const action  = row.action  ?? "—";
+                                            const trigger = row.trigger ?? "—";
+                                            const status  = row.status  ?? "—";
+                                            return (
+                                                <tr key={i}>
+                                                    <td><span className="cell-mono">{row.time ?? "—"}</span></td>
+                                                    <td><span className="cell-bold">{row.field ?? "—"}</span></td>
+                                                    <td>
+                            <span className={`badge ${action === "START" ? "badge--start" : "badge--stop"}`}>
+                              <span className="bdot" />{action}
+                            </span>
+                                                    </td>
+                                                    <td>
+                            <span className={`trigger trigger--${String(trigger).toLowerCase()}`}>
+                              {trigger}
+                            </span>
+                                                    </td>
+                                                    <td>
+                            <span className={`badge ${status === "SUCCESS" ? "badge--success" : "badge--failed"}`}>
+                              <span className="bdot" />{status}
+                            </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                }
                                 </tbody>
                             </table>
                         </div>
@@ -699,7 +792,7 @@ export default function FarmManagerDashboard() {
                 </section>
 
                 {/* ════════════════════════════════════════════
-            VIEW 2: FIELDS
+            VIEW 2: FIELDS  (now a TABLE, not cards)
         ════════════════════════════════════════════ */}
                 <section className={`view${activeView !== "fields" ? " view--hidden" : ""}`}
                          id="view-fields" aria-labelledby="fieldsTitle">
@@ -710,44 +803,53 @@ export default function FarmManagerDashboard() {
                             <p className="view-sub">Your registered farm zones and parcels</p>
                         </div>
                         <div className="view-header-right">
-                            <span className="count-chip" aria-live="polite">{FIELDS.length} fields</span>
+                            <span className="count-chip" aria-live="polite">
+                                {isLoading(fields) ? "—" : `${fields.length} field${fields.length === 1 ? "" : "s"}`}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="field-cards-grid" role="list" aria-label="Farm fields">
-                        {FIELDS.map((field) => {
-                            const isActive    = field.status === "Active";
-                            const sensorCount = SENSORS.filter(s => s.field === field.name).length;
-                            return (
-                                <article key={field.id} className="field-card" role="listitem"
-                                         aria-label={`${field.name}, ${field.status}`}>
-                                    <div className={`fc-strip${isActive ? "" : " fc-strip--offline"}`} />
-                                    <div className="fc-body">
-                                        <div className="fc-top">
-                                            <div className={`fc-icon${isActive ? "" : " fc-icon--offline"}`}
-                                                 aria-hidden="true">
-                                                <FieldIcon width={18} height={18} />
-                                            </div>
-                                            <span className={`badge ${isActive ? "badge--active" : "badge--inactive"}`}>
-                        <span className="bdot" />{field.status}
-                      </span>
-                                        </div>
-                                        <div className="fc-name">{field.name}</div>
-                                        <div className="fc-loc">{field.location}</div>
-                                        <div className="fc-meta">
-                                            <div className="fc-meta-item">
-                                                <span className="fc-meta-val">{field.size}</span>
-                                                <span className="fc-meta-label">Size</span>
-                                            </div>
-                                            <div className="fc-meta-item">
-                                                <span className="fc-meta-val">{sensorCount}</span>
-                                                <span className="fc-meta-label">Sensors</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </article>
-                            );
-                        })}
+                    <div className="panel">
+                        <div className="table-scroll" role="region" aria-label="Fields table" tabIndex={0}>
+                            <table className="data-table">
+                                <thead>
+                                <tr>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Location</th>
+                                    <th scope="col">Size</th>
+                                    <th scope="col">Sensors</th>
+                                    <th scope="col">Status</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {isLoading(fields)
+                                    ? <tr><td colSpan={5} className="table-empty">Loading…</td></tr>
+                                    : fields.length === 0
+                                        ? <tr><td colSpan={5} className="table-empty">No fields registered yet.</td></tr>
+                                        : fields.map((field) => {
+                                            const isActive = String(field.status).toLowerCase() === "active";
+                                            const sensorCount = Array.isArray(sensors)
+                                                ? sensors.filter(s => s.field === field.name).length
+                                                : 0;
+                                            return (
+                                                <tr key={field.id ?? field.name}>
+                                                    <td><span className="cell-bold">{field.name ?? "—"}</span></td>
+                                                    <td>{field.location ?? "—"}</td>
+                                                    <td><span className="cell-muted">{field.size ?? "—"}</span></td>
+                                                    <td><span className="cell-mono">{sensorCount}</span></td>
+                                                    <td>
+                                                        <span className={`badge ${isActive ? "badge--active" : "badge--inactive"}`}>
+                                                            <span className="bdot" />
+                                                            {isActive ? "Active" : "Inactive"}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                }
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                 </section>
@@ -778,23 +880,31 @@ export default function FarmManagerDashboard() {
                     <div className="panel">
                         <div className="sensor-summary-bar">
                             <div className="ssb-item">
-                                <span className="ssb-val">{SENSORS.filter(s => s.status === "Online").length}</span>
+                                <span className="ssb-val">
+                                    {Array.isArray(sensors)
+                                        ? sensors.filter(s => String(s.status).toLowerCase() === "online").length
+                                        : "—"}
+                                </span>
                                 <span className="ssb-label">Online</span>
                             </div>
                             <div className="ssb-divider" />
                             <div className="ssb-item">
-                <span className="ssb-val ssb-val--off">
-                  {SENSORS.filter(s => s.status === "Offline").length}
-                </span>
+                                <span className="ssb-val ssb-val--off">
+                                    {Array.isArray(sensors)
+                                        ? sensors.filter(s => String(s.status).toLowerCase() === "offline").length
+                                        : "—"}
+                                </span>
                                 <span className="ssb-label">Offline</span>
                             </div>
                             <div className="ssb-divider" />
                             <div className="ssb-item">
-                                <span className="ssb-val">{SENSORS.length}</span>
+                                <span className="ssb-val">{Array.isArray(sensors) ? sensors.length : "—"}</span>
                                 <span className="ssb-label">Total</span>
                             </div>
-                            <div className="ws-spinner ws-spinner--sm" style={{ marginLeft: "auto" }}
-                                 title="Awaiting live sensor feed" aria-label="Awaiting WebSocket data" />
+                            {wsStatus !== WS_STATUS.CONNECTED && (
+                                <div className="ws-spinner ws-spinner--sm" style={{ marginLeft: "auto" }}
+                                     title={wsBadgeLabel(wsStatus)} aria-label={wsBadgeLabel(wsStatus)} />
+                            )}
                         </div>
                         <div className="table-scroll" role="region" aria-label="Sensors table" tabIndex={0}>
                             <table className="data-table">
@@ -809,28 +919,33 @@ export default function FarmManagerDashboard() {
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {SENSORS.map((sensor) => {
-                                    const isOnline = sensor.status === "Online";
-                                    return (
-                                        <tr key={sensor.name}>
-                                            <td><span className="cell-bold">{sensor.name}</span></td>
-                                            <td>{sensor.field}</td>
-                                            <td><span className="cell-muted">{sensor.type}</span></td>
-                                            <td>
-                          <span className={`badge ${isOnline ? "badge--online" : "badge--offline"}`}>
-                            <span className="bdot" />{sensor.status}
-                          </span>
-                                            </td>
-                                            <td>
-                                                {isOnline
-                                                    ? <span className="cell-bold">{sensor.reading}</span>
-                                                    : <span className="cell-muted">—</span>
-                                                }
-                                            </td>
-                                            <td><span className="cell-mono">{sensor.updated}</span></td>
-                                        </tr>
-                                    );
-                                })}
+                                {isLoading(sensors)
+                                    ? <tr><td colSpan={6} className="table-empty">Loading…</td></tr>
+                                    : sensors.length === 0
+                                        ? <tr><td colSpan={6} className="table-empty">No sensors registered yet.</td></tr>
+                                        : sensors.map((sensor) => {
+                                            const isOnline = String(sensor.status).toLowerCase() === "online";
+                                            return (
+                                                <tr key={sensor.name}>
+                                                    <td><span className="cell-bold">{sensor.name ?? "—"}</span></td>
+                                                    <td>{sensor.field ?? "—"}</td>
+                                                    <td><span className="cell-muted">{sensor.type ?? "—"}</span></td>
+                                                    <td>
+                                                        <span className={`badge ${isOnline ? "badge--online" : "badge--offline"}`}>
+                                                            <span className="bdot" />{sensor.status ?? "—"}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {isOnline
+                                                            ? <span className="cell-bold">{sensor.reading ?? "—"}</span>
+                                                            : <span className="cell-muted">—</span>
+                                                        }
+                                                    </td>
+                                                    <td><span className="cell-mono">{sensor.updated ?? "—"}</span></td>
+                                                </tr>
+                                            );
+                                        })
+                                }
                                 </tbody>
                             </table>
                         </div>
@@ -858,7 +973,7 @@ export default function FarmManagerDashboard() {
                                             value={fieldFilter}
                                             onChange={e => setFieldFilter(e.target.value)}>
                                         <option value="all">All Fields</option>
-                                        {FIELD_NAMES_UNIQUE.map(name => (
+                                        {fieldNamesUnique.map(name => (
                                             <option key={name} value={name}>{name}</option>
                                         ))}
                                     </select>
@@ -887,23 +1002,27 @@ export default function FarmManagerDashboard() {
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {irrigRows.length === 0
-                                    ? <tr><td colSpan={6} className="table-empty">
-                                        No irrigation sessions match this filter.
-                                    </td></tr>
-                                    : irrigRows.map((row, i) => {
-                                        const fbClass = { SUCCESS: "fb--success", FAILED: "fb--failed", CANCELED: "fb--canceled" }[row.feedback] || "fb--success";
-                                        return (
-                                            <tr key={i}>
-                                                <td><span className="cell-bold">{row.field}</span></td>
-                                                <td><span className={`mode mode--${row.mode.toLowerCase()}`}>{row.mode}</span></td>
-                                                <td><span className="cell-mono">{row.start}</span></td>
-                                                <td><span className="cell-mono">{row.end}</span></td>
-                                                <td><span className="cell-muted">{row.duration}</span></td>
-                                                <td><span className={`fb ${fbClass}`}>{row.feedback}</span></td>
-                                            </tr>
-                                        );
-                                    })
+                                {isLoading(irrigRows)
+                                    ? <tr><td colSpan={6} className="table-empty">Loading…</td></tr>
+                                    : irrigRows.length === 0
+                                        ? <tr><td colSpan={6} className="table-empty">
+                                            No irrigation sessions match this filter.
+                                        </td></tr>
+                                        : irrigRows.map((row, i) => {
+                                            const fb = row.feedback ?? "—";
+                                            const fbClass = { SUCCESS: "fb--success", FAILED: "fb--failed", CANCELED: "fb--canceled" }[fb] || "fb--success";
+                                            const mode = String(row.mode ?? "—");
+                                            return (
+                                                <tr key={i}>
+                                                    <td><span className="cell-bold">{row.field ?? "—"}</span></td>
+                                                    <td><span className={`mode mode--${mode.toLowerCase()}`}>{mode}</span></td>
+                                                    <td><span className="cell-mono">{row.start ?? "—"}</span></td>
+                                                    <td><span className="cell-mono">{row.end ?? "—"}</span></td>
+                                                    <td><span className="cell-muted">{row.duration ?? "—"}</span></td>
+                                                    <td><span className={`fb ${fbClass}`}>{fb}</span></td>
+                                                </tr>
+                                            );
+                                        })
                                 }
                                 </tbody>
                             </table>
@@ -950,10 +1069,10 @@ export default function FarmManagerDashboard() {
                         <div className="ws-bar" aria-live="polite">
                             <div className="ws-spinner ws-spinner--sm" aria-hidden="true" />
                             <span className="ws-bar-text">
-                {wsStatus === "Connected"
-                    ? "Connected — receiving real-time alerts."
-                    : "Polling for new alerts… Real-time via WebSocket when connected."}
-              </span>
+                                {wsStatus === WS_STATUS.CONNECTED
+                                    ? "Connected — receiving real-time alerts."
+                                    : `${wsBadgeLabel(wsStatus)} — polling for new alerts.`}
+                            </span>
                         </div>
                         <div className="table-scroll" role="region" aria-label="Alerts table" tabIndex={0}>
                             <table className="data-table">
@@ -966,19 +1085,22 @@ export default function FarmManagerDashboard() {
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {alerts.length === 0
-                                    ? <tr><td colSpan={4} className="table-empty">No active alerts.</td></tr>
-                                    : alerts.map((alert, i) => {
-                                        const sevClass = { Low: "sev--low", Medium: "sev--med", High: "sev--high" }[alert.severity] || "sev--low";
-                                        return (
-                                            <tr key={i}>
-                                                <td><span className="cell-mono">{alert.time}</span></td>
-                                                <td><span className="cell-bold">{alert.field}</span></td>
-                                                <td>{alert.message}</td>
-                                                <td><span className={`sev ${sevClass}`}>{alert.severity}</span></td>
-                                            </tr>
-                                        );
-                                    })
+                                {isLoading(alerts)
+                                    ? <tr><td colSpan={4} className="table-empty">Loading…</td></tr>
+                                    : alerts.length === 0
+                                        ? <tr><td colSpan={4} className="table-empty">No active alerts.</td></tr>
+                                        : alerts.map((alert, i) => {
+                                            const sev = String(alert.severity ?? "—");
+                                            const sevClass = { Low: "sev--low", Medium: "sev--med", High: "sev--high" }[sev] || "sev--low";
+                                            return (
+                                                <tr key={i}>
+                                                    <td><span className="cell-mono">{alert.time ?? "—"}</span></td>
+                                                    <td><span className="cell-bold">{alert.field ?? "—"}</span></td>
+                                                    <td>{alert.message ?? "—"}</td>
+                                                    <td><span className={`sev ${sevClass}`}>{sev}</span></td>
+                                                </tr>
+                                            );
+                                        })
                                 }
                                 </tbody>
                             </table>

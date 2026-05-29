@@ -1,124 +1,89 @@
-// ===== File: login.js (full — replaces previous version) =====
+// ===== File: src/services/dashboard.js =====
+//
+// Admin dashboard REST services. All requests:
+//   • flow through apiFetch (auto-attaches Bearer token)
+//   • use the centralized endpoint constants in /config/api.js
+//   • throw an Error with the backend message on non-2xx responses
 
-const ADMIN_URL_V1   = "https://smartfarming-backend-production.up.railway.app/api/admin/v1";
+import { apiFetch }     from "./http.js";
+import { ADMIN, AUTH }  from "../../../../smartfarming-ui/src/config/api.js";
 
-function authHeaders() {
-    return {
-        "Authorization": `Bearer ${localStorage.getItem("token")}`,
-        "Content-Type": "application/json",
-    };
+// ── Admin — Stats ────────────────────────────────────────────────
+
+export function getUsersCount()        { return apiFetch(ADMIN.totalUsers);   }
+export function getFieldsCount()       { return apiFetch(ADMIN.totalFields);  }
+export function getHybridModelStatus() { return apiFetch(ADMIN.modelStatus);  }
+
+// Optional aggregate stats endpoint (placeholder). Returns whatever the
+// backend exposes for the top dashboard cards — the consumer treats
+// missing fields as "—".
+export function getDashboardStats() {
+    return apiFetch(ADMIN.dashboardStats);
 }
 
-// ── Admin — Stats ─────────────────────────────────────────────
-
-export async function getUsersCount() {
-    const res = await fetch(`${ADMIN_URL_V1}/total-users`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // { totalUsers }
+// Recent irrigation commands (table on the admin dashboard home).
+export function getRecentCommands() {
+    return apiFetch(ADMIN.recentCommands);
 }
 
-export async function getFieldsCount() {
-    const res = await fetch(`${ADMIN_URL_V1}/total-fields`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // { totalFields }
+// Water usage stat (top-right card).
+export function getWaterUsage() {
+    return apiFetch(ADMIN.waterUsage);
 }
 
-export async function getHybridModelStatus() {
-    const res = await fetch(`${ADMIN_URL_V1}/model-status`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // { status: "ONLINE" | "OFFLINE" }
+// Admin alerts (REST hydration; WS pushes updates).
+export function getAdminAlerts() {
+    return apiFetch(ADMIN.alerts);
 }
 
-// ── Admin — Users ─────────────────────────────────────────────
+// ── Admin — Users ────────────────────────────────────────────────
 
-export async function loadAllUsers() {
-    const res = await fetch(`${ADMIN_URL_V1}/load-users`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // User[]
+export function loadAllUsers() {
+    return apiFetch(ADMIN.loadUsers);
 }
 
-export async function addNewAdminUser(name, email, phone, role) {
-    const res = await fetch(`http://localhost:8080/api/auth/v1/add-new-user`, {
+export function addNewAdminUser(name, email, phone, role) {
+    return apiFetch(AUTH.addNewUser, {
         method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({
-            userName: name,
+        body: {
+            userName:     name,
             emailAddress: email,
-            phoneNumber: phone,
-            role: role }),
+            phoneNumber:  phone,
+            role,
+        },
     });
-    let data = {};
-    try { data = await res.json(); } catch { /* empty body */ }
-    if (!res.ok) throw new Error(data.message || `Error ${res.status}`);
-    return data;
 }
 
-export async function updateUserStatus(emailAddress, newStatus) {
-    const res = await fetch(`${ADMIN_URL_V1}/user-status`, {
+export function updateUserStatus(emailAddress, newStatus) {
+    return apiFetch(ADMIN.userStatus, {
         method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({
-            emailAddress: emailAddress,
-            status: newStatus,
-        }),
+        body:   { emailAddress, status: newStatus },
     });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json();
 }
 
-export async function getUserDetails(email) {
-    const res = await fetch(`${ADMIN_URL_V1}/user-details/${email}`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json();
+export function getUserDetails(email) {
+    return apiFetch(ADMIN.userDetails(email));
 }
 
-// ── Admin — Fields ────────────────────────────────────────────
+// ── Admin — Fields ───────────────────────────────────────────────
 
-export async function loadAllFields() {
-    const res = await fetch(`${ADMIN_URL_V1}/load-all-fields`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // Field[]
+export function loadAllFields() {
+    return apiFetch(ADMIN.loadAllFields);
 }
 
-export async function addNewAdminField(farmName, size, location, ownerId) {
-    const res = await fetch(`${ADMIN_URL_V1}/fields`, {
+export function addNewAdminField(farmName, size, location, ownerId) {
+    return apiFetch(ADMIN.addField, {
         method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ farmName, size, location, ownerId }),
+        body:   { farmName, size, location, ownerId },
     });
-    let data = {};
-    try { data = await res.json(); } catch { /* empty body */ }
-    if (!res.ok) throw new Error(data.message || `Error ${res.status}`);
-    return data;
 }
 
-export async function populateAdminOwnersDropdown() {
-    // Returns a minimal list of users to populate the field-owner select
-    const res = await fetch(`${ADMIN_URL_V1}/users?role=FARMER`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // [{ id, name }]
+export function populateAdminOwnersDropdown() {
+    return apiFetch(ADMIN.ownersDropdown);
 }
 
-// ── Admin — Activity Log ──────────────────────────────────────
+// ── Admin — Activity Log ─────────────────────────────────────────
 
-export async function loadAdminActivityLog() {
-    const res = await fetch(`${ADMIN_URL_V1}/activity`, {
-        method: "GET", headers: authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Error ${res.status}`);
-    return res.json(); // ActivityLog[]
+export function loadAdminActivityLog() {
+    return apiFetch(ADMIN.activityLog);
 }

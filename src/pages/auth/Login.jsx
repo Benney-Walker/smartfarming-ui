@@ -78,9 +78,17 @@ export default function Login() {
         try {
             const data = await loginUser(username.trim(), password);
 
+            // ── Auth storage ───────────────────────────────────
+            // Backend now returns { token, email, role } — store all
+            // three. The dashboards read `email` (not `username`) from
+            // localStorage; the `email` header is required by certain
+            // farmer endpoints.
             localStorage.setItem("token", data.token);
-            localStorage.setItem("username", data.username);
-            localStorage.setItem("role", data.role);
+            localStorage.setItem("email", data.email ?? username.trim());
+            localStorage.setItem("role",  data.role);
+
+            // Clean up any legacy key from a previous build.
+            localStorage.removeItem("username");
 
             if (data.role === "ADMIN") {
                 navigate("/admin-dashboard");

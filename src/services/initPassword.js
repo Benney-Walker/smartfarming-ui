@@ -1,24 +1,23 @@
-// ===== File: login.js (updated — append setNewPassword to the existing file) =====
+// ===== File: src/services/initPassword.js =====
+//
+// Sets a first-time user's password.
 
-const BASE_URL = "https://smartfarming-backend-production.up.railway.app/api/auth";
+import { BASE_URL, AUTH } from "../../../../smartfarming-ui/src/config/api.js";
 
 /**
  * Sets a new password for a first-time user.
  * Throws with a human-readable message on failure.
  */
 export async function setNewPassword(emailAddress, initialPassword) {
-    const response = await fetch(`${BASE_URL}/set-new-password`, {
+    const response = await fetch(`${BASE_URL}${AUTH.setNewPassword}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emailAddress, initialPassword }),
     });
 
     let data = {};
-    try {
-        data = await response.json();
-    } catch {
-        /* empty or non-JSON body — ignore */
-    }
+    try { data = await response.json(); }
+    catch { /* empty or non-JSON body — ignore */ }
 
     if (!response.ok) {
         throw new Error(
@@ -26,6 +25,5 @@ export async function setNewPassword(emailAddress, initialPassword) {
             `Something went wrong (${response.status}). Please try again.`
         );
     }
-
     return data;
 }
