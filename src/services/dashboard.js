@@ -6,7 +6,7 @@
 //   • throw an Error with the backend message on non-2xx responses
 
 import { apiFetch }     from "./http.js";
-import { ADMIN, AUTH }  from "../../../../smartfarming-ui/src/config/api.js";
+import { ADMIN, AUTH }  from "../config/api.js";
 
 // ── Admin — Stats ────────────────────────────────────────────────
 

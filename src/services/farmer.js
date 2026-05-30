@@ -1,26 +1,10 @@
-// ===== File: src/services/farmer.js =====
-//
-// Farmer dashboard REST services.
-//
-// All requests:
-//   • flow through apiFetch
-//   • attach `email` header automatically (withEmail: true) because
-//     some farmer endpoints scope their response by the requesting user
-//   • use centralized endpoint constants in /config/api.js
 
-import { apiFetch } from "../../../SchoolProject/attendance-frontend/src/services/http.js";
+import { apiFetch } from "./http.js";
 import { FARMER }   from "../config/api.js";
 
 const opts = { withEmail: true };
 
-// ── Dashboard top-card aggregate ─────────────────────────────────
-// Expected response shape (consumer treats missing keys as "—"):
-//   {
-//     activeFields,        // number
-//     onlineSensors,       // number
-//     irrigationsToday,    // number
-//     avgMoisture,         // number (0..100)
-//   }
+
 export function getFarmerStats() {
     return apiFetch(FARMER.dashboardStats, opts);
 }

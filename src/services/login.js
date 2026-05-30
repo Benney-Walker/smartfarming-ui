@@ -1,12 +1,5 @@
-// ===== File: src/services/login.js =====
-//
-// Public (unauthenticated) auth endpoints used by the Login screen.
-//
-// Login now returns: { token, email, role }
-// (NOT `username` anymore — the Login page stores all three in
-// localStorage and consumers should read `email` from there.)
 
-import { BASE_URL, AUTH } from "../../../../smartfarming-ui/src/config/api.js";
+import { BASE_URL, AUTH } from "../config/api.js";
 
 /**
  * Look up whether an email belongs to a known user.

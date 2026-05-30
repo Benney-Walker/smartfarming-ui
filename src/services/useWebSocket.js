@@ -7,7 +7,7 @@ import {
     WS_URL,
     WS_RECONNECT_DELAY,
     WS_STATUS,
-} from "../../../../smartfarming-ui/src/config/websocket.js";
+} from "../config/websocket.js";
 
 
 export function useWebSocket({

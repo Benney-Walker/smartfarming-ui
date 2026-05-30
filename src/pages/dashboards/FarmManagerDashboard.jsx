@@ -9,8 +9,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useWebSocket }      from "../../services/useWebSocket.js";
-import { useBodyScrollLock } from "../../../../../smartfarming-ui/src/hooks/useBodyScrollLock.js";
-import { WS_TOPICS, WS_STATUS } from "../../../../../smartfarming-ui/src/config/websocket.js";
+import { useBodyScrollLock } from "../../hooks/useBodyScrollLock.js";
+import { WS_TOPICS, WS_STATUS } from "../../config/websocket.js";
 
 import {
     getFarmerStats,
@@ -22,7 +22,7 @@ import {
     getSoilSnapshot,
 } from "../../services/farmer.js";
 
-import MobileNavOverlay from "../../../../../smartfarming-ui/src/components/MobileNavOverlay.jsx";
+import MobileNavOverlay from "../../components/MobileNavOverlay.jsx";
 
 import "../../styles/farmmanagerdashboard.css";
 import "../../styles/_dashboard-patches.css";

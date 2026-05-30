@@ -2,7 +2,7 @@
 //
 // Sets a first-time user's password.
 
-import { BASE_URL, AUTH } from "../../../../smartfarming-ui/src/config/api.js";
+import { BASE_URL, AUTH } from "../config/api.js";
 
 /**
  * Sets a new password for a first-time user.

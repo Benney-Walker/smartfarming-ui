@@ -1,13 +1,3 @@
-// ===== File: src/services/http.js =====
-//
-// Thin fetch wrapper that:
-//   1. Prepends BASE_URL so callers pass plain paths.
-//   2. Attaches "Authorization: Bearer <token>" automatically.
-//   3. Optionally attaches an "email: <user@x>" header
-//      (farmer endpoints sometimes require this).
-//   4. Parses JSON safely (handles empty bodies).
-//   5. Throws an Error with the backend's `message` field
-//      whenever the response is not 2xx.
 
 import { BASE_URL } from "../config/api.js";
 
