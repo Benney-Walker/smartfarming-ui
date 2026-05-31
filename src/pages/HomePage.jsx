@@ -1,4 +1,3 @@
-// ===== File: HomePage.jsx =====
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -214,9 +213,14 @@ export default function HomePage() {
                 </nav>
 
                 <div className="sidebar-footer">
+                    {/*
+                       The dot here is purely a brand accent — NOT a live
+                       backend status indicator. Do not wire it to a
+                       runtime check from this static landing page.
+                    */}
                     <div className="sidebar-status">
                         <span className="status-dot" />
-                        <span className="status-text">System Online</span>
+                        <span className="status-text">Final-Year Project</span>
                     </div>
                 </div>
             </aside>
@@ -267,7 +271,7 @@ export default function HomePage() {
                         <div className="hero-content">
                             <div className="hero-badge">
                                 <span className="badge-dot" />
-                                Precision Agriculture Platform
+                                Real-Time Irrigation Monitoring
                             </div>
 
                             <h1 className="hero-title" id="heroHeading">
@@ -276,20 +280,29 @@ export default function HomePage() {
                             </h1>
 
                             <p className="hero-lead">
-                                Precision irrigation powered by intelligent data. Monitor soil
-                                conditions, automate irrigation cycles, track crop analytics and
-                                optimise water usage — all from a single unified dashboard.
+                                A monitoring platform for irrigation-based farming. Track soil
+                                moisture, temperature and humidity from per-field sensors,
+                                manage irrigation manually or automatically, and respond to
+                                alerts in real time — with separate dashboards for administrators
+                                and farm managers.
                             </p>
 
+                            {/*
+                               Hero stat row.
+                               These are non-numeric capability descriptors, NOT statistics.
+                               If, in future, you want to surface real public counts (e.g.
+                               registered fields), fetch them from a backend endpoint and
+                               render a skeleton until the value arrives — never hardcode.
+                            */}
                             <div className="hero-stats">
                                 <div className="hstat">
-                                    <span className="hstat-value">98%</span>
-                                    <span className="hstat-label">Water Efficiency</span>
+                                    <span className="hstat-value">Live</span>
+                                    <span className="hstat-label">Sensor Data</span>
                                 </div>
                                 <div className="hstat-divider" />
                                 <div className="hstat">
-                                    <span className="hstat-value">24/7</span>
-                                    <span className="hstat-label">Live Monitoring</span>
+                                    <span className="hstat-value">Role-Based</span>
+                                    <span className="hstat-label">Admin &amp; Farmer</span>
                                 </div>
                             </div>
 
@@ -313,7 +326,13 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        {/* Right: dashboard card mockup */}
+                        {/*
+                           Right: dashboard preview card.
+                           This is a DECORATIVE mockup (aria-hidden) — it does not display
+                           any live data and must not be wired to one. Labels describe the
+                           categories the real dashboard shows; bars are decorative; no
+                           numeric values are rendered.
+                        */}
                         <div className="hero-visual" aria-hidden="true">
                             <div className="dashboard-card">
                                 <div className="dc-header">
@@ -325,28 +344,28 @@ export default function HomePage() {
 
                                 <div className="dc-body">
                                     <div className="dc-metric-group">
-                                        <span className="dc-metric-label">Soil Moisture</span>
+                                        <span className="dc-metric-label">Soil Conditions</span>
                                         <div className="dc-bars">
                                             <div className="dc-bar-row">
-                                                <span className="dc-zone">Zone A</span>
+                                                <span className="dc-zone">Moisture</span>
                                                 <div className="dc-bar-track">
-                                                    <div className="dc-bar-fill" style={{ "--fill": "72%" }} />
+                                                    <div className="dc-bar-fill" style={{ "--fill": "65%" }} />
                                                 </div>
-                                                <span className="dc-val">72%</span>
+                                                <span className="dc-val">—</span>
                                             </div>
                                             <div className="dc-bar-row">
-                                                <span className="dc-zone">Zone B</span>
+                                                <span className="dc-zone">Temperature</span>
                                                 <div className="dc-bar-track">
-                                                    <div className="dc-bar-fill" style={{ "--fill": "58%" }} />
+                                                    <div className="dc-bar-fill" style={{ "--fill": "55%" }} />
                                                 </div>
-                                                <span className="dc-val">58%</span>
+                                                <span className="dc-val">—</span>
                                             </div>
                                             <div className="dc-bar-row">
-                                                <span className="dc-zone">Zone C</span>
+                                                <span className="dc-zone">Humidity</span>
                                                 <div className="dc-bar-track">
-                                                    <div className="dc-bar-fill dc-bar-fill--warn" style={{ "--fill": "31%" }} />
+                                                    <div className="dc-bar-fill" style={{ "--fill": "60%" }} />
                                                 </div>
-                                                <span className="dc-val dc-val--warn">31%</span>
+                                                <span className="dc-val">—</span>
                                             </div>
                                         </div>
                                     </div>
@@ -355,33 +374,39 @@ export default function HomePage() {
 
                                     <div className="dc-status-row">
                                         <div className="dc-pill dc-pill--on">
-                                            <span className="dc-pill-dot" />Irrigation ON
+                                            <span className="dc-pill-dot" />Live Sensors
                                         </div>
                                         <div className="dc-pill dc-pill--ok">
-                                            <span className="dc-pill-dot" />Pump OK
+                                            <span className="dc-pill-dot" />Hybrid Model
                                         </div>
                                     </div>
 
+                                    {/*
+                                       Decorative "WebSocket signal" indicator — replaces
+                                       the previous fabricated 7-day water-usage chart.
+                                       This is NOT a data visualization; it's a stylized
+                                       wave that communicates "real-time stream".
+                                    */}
                                     <div className="dc-chart">
                                         <svg viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg" width="100%">
-                                            <defs>
-                                                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="#27a35d" stopOpacity="0.3" />
-                                                    <stop offset="100%" stopColor="#27a35d" stopOpacity="0" />
-                                                </linearGradient>
-                                            </defs>
-                                            <path d="M0 50 C20 45 30 20 50 25 C70 30 80 10 100 15 C120 20 130 35 150 28 C170 21 180 8 200 12 L200 60 L0 60 Z"
-                                                  fill="url(#chartGrad)" />
-                                            <path d="M0 50 C20 45 30 20 50 25 C70 30 80 10 100 15 C120 20 130 35 150 28 C170 21 180 8 200 12"
+                                            <path d="M0 30 Q20 30 25 30 T35 30 L48 30"
+                                                  stroke="#27a35d" strokeWidth="2" strokeLinecap="round"
+                                                  opacity="0.35" />
+                                            <path d="M55 30 Q62 12 70 30 T85 30 L95 30"
                                                   stroke="#27a35d" strokeWidth="2" strokeLinecap="round" />
-                                            <circle cx="200" cy="12" r="3.5" fill="#3ecf7a" />
+                                            <path d="M102 30 Q115 50 128 30 T148 30 L160 30"
+                                                  stroke="#27a35d" strokeWidth="2" strokeLinecap="round" />
+                                            <path d="M167 30 Q175 18 183 30 L200 30"
+                                                  stroke="#27a35d" strokeWidth="2" strokeLinecap="round"
+                                                  opacity="0.35" />
+                                            <circle cx="128" cy="30" r="3.5" fill="#3ecf7a" />
                                         </svg>
-                                        <div className="dc-chart-label">Water Usage — Last 7 days</div>
+                                        <div className="dc-chart-label">Real-time updates via WebSocket</div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Floating pills */}
+                            {/* Floating pills — describe real capabilities, not data */}
                             <div className="float-pill float-pill--top">
                                 <span className="float-dot" />
                                 <span>Live Sensor Feed</span>
@@ -390,7 +415,7 @@ export default function HomePage() {
                                 <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
                                     <path d="M8 2V14M2 8H14" stroke="#27a35d" strokeWidth="1.8" strokeLinecap="round" />
                                 </svg>
-                                <span>Auto-irrigation triggered</span>
+                                <span>Automated irrigation</span>
                             </div>
                         </div>
 
@@ -405,17 +430,17 @@ export default function HomePage() {
                         <div className="section-header">
                             <span className="section-eyebrow">Platform Capabilities</span>
                             <h2 className="section-title" id="featuresHeading">
-                                Everything you need to run<br />a smarter farm
+                                What the platform<br />actually does
                             </h2>
                             <p className="section-lead">
-                                Integrated tools designed to give farmers real-time visibility,
-                                automated control, and the data needed to make confident decisions.
+                                Four core modules that cover the day-to-day needs of an
+                                irrigation-based farm operation.
                             </p>
                         </div>
 
                         <div className="features-grid">
 
-                            <article className="feature-card" aria-label="Real-time Soil Monitoring">
+                            <article className="feature-card" aria-label="Real-Time Sensor Monitoring">
                                 <div className="feature-icon-wrap feature-icon-wrap--teal">
                                     <svg viewBox="0 0 24 24" fill="none" width="24" height="24" aria-hidden="true">
                                         <path d="M12 3C8 3 4 6 4 10C4 14 8 16 8 20H16C16 16 20 14 20 10C20 6 16 3 12 3Z"
@@ -426,16 +451,16 @@ export default function HomePage() {
                                               stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                                     </svg>
                                 </div>
-                                <h3 className="feature-title">Real-time Soil Monitoring</h3>
+                                <h3 className="feature-title">Real-Time Sensor Monitoring</h3>
                                 <p className="feature-desc">
-                                    Continuously track moisture, temperature, pH, and nutrient levels across
-                                    multiple field zones. Instant alerts notify you the moment conditions
-                                    fall outside optimal ranges.
+                                    Per-field sensors report soil moisture, temperature and
+                                    humidity. Readings stream into the dashboard over WebSocket,
+                                    so what you see is the latest state the field reported.
                                 </p>
-                                <div className="feature-tag">Sensor Network</div>
+                                <div className="feature-tag">Sensors</div>
                             </article>
 
-                            <article className="feature-card" aria-label="Smart Irrigation Automation">
+                            <article className="feature-card" aria-label="Irrigation Management">
                                 <div className="feature-icon-wrap feature-icon-wrap--blue">
                                     <svg viewBox="0 0 24 24" fill="none" width="24" height="24" aria-hidden="true">
                                         <path d="M12 3L8 9H5L3 15H21L19 9H16L12 3Z"
@@ -446,16 +471,16 @@ export default function HomePage() {
                                               stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                                     </svg>
                                 </div>
-                                <h3 className="feature-title">Smart Irrigation Automation</h3>
+                                <h3 className="feature-title">Irrigation Management</h3>
                                 <p className="feature-desc">
-                                    Schedule and automate irrigation cycles based on live sensor data,
-                                    weather forecasts, and crop requirements. Reduce manual intervention
-                                    while ensuring fields receive exactly the right amount of water.
+                                    Run irrigation manually or let the system automate it from
+                                    live sensor readings. Every session is recorded — start time,
+                                    end time, duration and outcome — per field.
                                 </p>
-                                <div className="feature-tag">Automation</div>
+                                <div className="feature-tag">Irrigation</div>
                             </article>
 
-                            <article className="feature-card" aria-label="Data Analytics Dashboard">
+                            <article className="feature-card" aria-label="Hybrid Decision Support">
                                 <div className="feature-icon-wrap feature-icon-wrap--green">
                                     <svg viewBox="0 0 24 24" fill="none" width="24" height="24" aria-hidden="true">
                                         <rect x="3" y="3" width="18" height="18" rx="3"
@@ -465,16 +490,17 @@ export default function HomePage() {
                                         <circle cx="17" cy="8" r="1.5" fill="currentColor" opacity="0.6" />
                                     </svg>
                                 </div>
-                                <h3 className="feature-title">Data Analytics Dashboard</h3>
+                                <h3 className="feature-title">Hybrid Decision Support</h3>
                                 <p className="feature-desc">
-                                    Visualise historical trends, compare field performance, and generate
-                                    reports on water consumption and crop yield. Turn raw sensor data into
-                                    clear, actionable insights.
+                                    A hybrid decision-support model evaluates incoming sensor
+                                    data and recommends when fields need irrigation. Admins can
+                                    see the model's connection status — online, offline, or
+                                    reconnecting — at any time.
                                 </p>
-                                <div className="feature-tag">Analytics</div>
+                                <div className="feature-tag">Decision Support</div>
                             </article>
 
-                            <article className="feature-card" aria-label="Secure Access Control">
+                            <article className="feature-card" aria-label="Alerts and Secure Access">
                                 <div className="feature-icon-wrap feature-icon-wrap--amber">
                                     <svg viewBox="0 0 24 24" fill="none" width="24" height="24" aria-hidden="true">
                                         <rect x="5" y="11" width="14" height="10" rx="2"
@@ -484,11 +510,12 @@ export default function HomePage() {
                                         <circle cx="12" cy="16" r="1.5" fill="currentColor" opacity="0.6" />
                                     </svg>
                                 </div>
-                                <h3 className="feature-title">Secure Access Control</h3>
+                                <h3 className="feature-title">Alerts &amp; Secure Access</h3>
                                 <p className="feature-desc">
-                                    Role-based authentication ensures each team member accesses only what
-                                    they need. JWT-secured sessions, audit logs, and encrypted data
-                                    transmission protect your operation at every level.
+                                    Threshold alerts are surfaced at low, medium and high
+                                    severity. Authentication is JWT-based with role-based
+                                    access — administrators and farm managers each see only
+                                    what their role permits.
                                 </p>
                                 <div className="feature-tag">Security</div>
                             </article>
@@ -503,42 +530,47 @@ export default function HomePage() {
                 <section className="section about-section" id="about" aria-labelledby="aboutHeading">
                     <div className="section-inner about-inner">
 
-                        {/* Left: visual card */}
+                        {/*
+                           Left: platform-modules card.
+                           Replaces the previous "metrics" card that contained fake numbers.
+                           Each row names a module that exists in the platform; the bars
+                           below are full-width decorative accents, NOT progress indicators.
+                        */}
                         <div className="about-visual" aria-hidden="true">
                             <div className="about-card">
                                 <div className="about-card-header">
                                     <div className="about-status">
                                         <span className="badge-dot" />
-                                        Active Deployment
+                                        Platform Modules
                                     </div>
                                 </div>
                                 <div className="about-metrics">
                                     <div className="am-row">
-                                        <span className="am-label">Fields Monitored</span>
-                                        <span className="am-value am-value--accent">12 Zones</span>
+                                        <span className="am-label">Sensor Monitoring</span>
+                                        <span className="am-value am-value--accent">Included</span>
                                     </div>
                                     <div className="am-bar-wrap">
-                                        <div className="am-bar" style={{ "--fill": "88%" }} />
+                                        <div className="am-bar" style={{ "--fill": "100%" }} />
                                     </div>
                                     <div className="am-row">
-                                        <span className="am-label">Water Saved This Month</span>
-                                        <span className="am-value am-value--accent">4,200 L</span>
+                                        <span className="am-label">Irrigation Management</span>
+                                        <span className="am-value am-value--accent">Included</span>
                                     </div>
                                     <div className="am-bar-wrap">
-                                        <div className="am-bar" style={{ "--fill": "72%" }} />
+                                        <div className="am-bar" style={{ "--fill": "100%" }} />
                                     </div>
                                     <div className="am-row">
-                                        <span className="am-label">Irrigation Efficiency</span>
-                                        <span className="am-value am-value--accent">98.4%</span>
+                                        <span className="am-label">Hybrid Decision Support</span>
+                                        <span className="am-value am-value--accent">Included</span>
                                     </div>
                                     <div className="am-bar-wrap">
-                                        <div className="am-bar" style={{ "--fill": "98%" }} />
+                                        <div className="am-bar" style={{ "--fill": "100%" }} />
                                     </div>
                                 </div>
                                 <div className="about-card-footer">
                   <span className="acf-tag">
                     <SmallCheckIcon />
-                    Sustainable Farming Certified
+                    Final-Year Project · UMaT
                   </span>
                                 </div>
                             </div>
@@ -549,22 +581,24 @@ export default function HomePage() {
                         <div className="about-content">
                             <span className="section-eyebrow">About the Platform</span>
                             <h2 className="section-title" id="aboutHeading">
-                                Built for the future<br />of agriculture
+                                Designed for<br />irrigation-led farming
                             </h2>
                             <p className="about-body">
-                                The Smart Farming Monitoring System is an intelligent precision-agriculture
-                                platform designed to help farmers, agronomists, and land managers make better
-                                decisions with less effort. By combining real-time sensor data with automated
-                                control logic, the system eliminates guesswork from irrigation management.
+                                The Smart Farming Monitoring System is a software platform that
+                                helps farm managers and administrators monitor and control
+                                irrigation. It collects soil readings from per-field sensors,
+                                supports manual and automated irrigation, and provides separate
+                                dashboards for each role — all backed by a hybrid decision-support
+                                model that recommends when fields need watering.
                             </p>
 
                             <ul className="about-list" role="list">
                                 {[
-                                    "Improves irrigation efficiency and eliminates over-watering",
-                                    "Reduces water waste through precision data-driven scheduling",
-                                    "Helps farmers make confident, data-driven agronomic decisions",
-                                    "Supports sustainable agriculture and long-term soil health",
-                                    "Scales from single fields to large multi-zone farm operations",
+                                    "Live soil moisture, temperature and humidity from per-field sensors",
+                                    "Manual and automated irrigation with full per-field history",
+                                    "Hybrid decision-support model that recommends when to irrigate",
+                                    "Real-time alerts when sensor readings cross configured thresholds",
+                                    "Separate ADMIN and FARMER dashboards with JWT-secured, role-based access",
                                 ].map((item) => (
                                     <li key={item} className="about-item">
                     <span className="about-item-icon" aria-hidden="true">
@@ -598,7 +632,6 @@ export default function HomePage() {
                                 We're here when you need us
                             </h2>
                             <p className="section-lead">
-                                Our support team is available to help you get the most from the platform.
                                 Reach out through any of the channels below.
                             </p>
                         </div>
@@ -616,7 +649,7 @@ export default function HomePage() {
                                 </div>
                                 <h3 className="support-title">Email Support</h3>
                                 <p className="support-desc">
-                                    Send us a detailed message and we'll respond within one business day.
+                                    Send us a detailed message and we'll respond as soon as we can.
                                 </p>
                                 <a href="mailto:ce-bbbenney7122@st.umat.edu.gh" className="support-contact">
                                     ce-bbbenney7122@st.umat.edu.gh
@@ -632,7 +665,7 @@ export default function HomePage() {
                                 </div>
                                 <h3 className="support-title">Phone Support</h3>
                                 <p className="support-desc">
-                                    Speak directly with a support specialist during active hours.
+                                    Reach the project team by phone during active hours.
                                 </p>
                                 <a href="tel:+233595667189" className="support-contact">
                                     +233 595667189 · +233 241979615 · +233 202734675
